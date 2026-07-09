@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Redacted } from "effect"
 
-const SERVICE = "tg-ping-ping"
+const SERVICE = "buddytg"
 
 export class KeychainError extends Error {
   readonly _tag = "KeychainError"

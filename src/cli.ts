@@ -17,21 +17,21 @@ import {
   tg,
 } from "./telegram"
 
-const usage = `tg-ping-ping — send Telegram messages as yourself
+const usage = `BuddyTG — send Telegram messages as yourself
 
 Usage:
-  tg login                  Log in by scanning a QR code from the Telegram app (default)
-  tg login --phone          Log in with phone number + code instead
-  tg send <peer> <message>  Send a message ("me", @username, or phone number)
-  tg bookmarks [file]       Export all Saved Messages to a markdown file (default: saved-messages.md)
+  buddytg login                  Log in by scanning a QR code from the Telegram app (default)
+  buddytg login --phone          Log in with phone number + code instead
+  buddytg send <peer> <message>  Send a message ("me", @username, or phone number)
+  buddytg bookmarks [file]       Export all Saved Messages to a markdown file (default: saved-messages.md)
      --download-media       Also download media files next to the export
-  tg bot login              Set up your notification bot (token from @BotFather)
-  tg notify <message>       Notify yourself via your own bot (real push notification)
+  buddytg bot login              Set up your notification bot (token from @BotFather)
+  buddytg notify <message>       Notify yourself via your own bot (real push notification)
      --html                 Parse message as HTML (<b>, <i>, <code>, <a href>, <tg-spoiler>...)
      --markdown             Parse message as MarkdownV2 (*bold*, _italic_, \`code\`, [link](url)...)
      --silent               Deliver without sound
-  tg whoami                 Show the currently logged-in account
-  tg logout                 Log out and remove all secrets from the Keychain
+  buddytg whoami                 Show the currently logged-in account
+  buddytg logout                 Log out and remove all secrets from the Keychain
 
 Setup:
   Get your api_id/api_hash from https://my.telegram.org/apps
@@ -192,7 +192,7 @@ const notify = (message: string, opts: { parseMode?: "HTML" | "MarkdownV2"; sile
   Effect.gen(function* () {
     const keychain = yield* Keychain
 
-    // 1. Bot token (one-time setup via `tg bot login`)
+    // 1. Bot token (one-time setup via `buddytg bot login`)
     let token = yield* loadBotToken
     if (!token) token = yield* botLogin
 

@@ -1,11 +1,12 @@
 {
-  "name": "tg-ping-ping",
+  "name": "buddytg",
   "module": "src/cli.ts",
   "type": "module",
   "scripts": {
     "tg": "bun src/cli.ts",
+    "buddytg": "bun src/cli.ts",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/cli.ts --compile --outfile dist/tg"
+    "build": "bun build src/cli.ts --compile --outfile dist/buddytg"
   },
   "private": true,
   "devDependencies": {

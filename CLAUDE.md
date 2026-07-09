@@ -129,6 +129,6 @@ on Telegram using the `telegram-notify` skill (`.devin/skills/telegram-notify/SK
 Format: rich HTML, "Agent X is done with Y in Z":
 
 ```bash
-tg notify --html "$(printf '<b>✅ %s is done!</b>\n\n<b>Task:</b> %s\n<b>Project:</b> <code>%s</code>' "Devin" "task summary" "project")"
+buddytg notify --html "$(printf '<b>✅ %s is done!</b>\n\n<b>Task:</b> %s\n<b>Project:</b> <code>%s</code>' "Devin" "task summary" "project")"
 ```
 
