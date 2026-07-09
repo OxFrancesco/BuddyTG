@@ -39,3 +39,6 @@ resources/
 # safety: never commit telegram sessions or personal exports
 *.session*
 saved-messages*.md
+
+# auto-generated dashboards / personal exports
+.artifacts/
