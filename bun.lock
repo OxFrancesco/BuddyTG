@@ -5,6 +5,7 @@
       "name": "tg-ping-ping",
       "dependencies": {
         "@mtcute/bun": "^0.30.3",
+        "@mtcute/markdown-parser": "^0.30.3",
         "@types/qrcode-terminal": "^0.12.2",
         "effect": "^3.21.4",
         "qrcode-terminal": "^0.12.0",

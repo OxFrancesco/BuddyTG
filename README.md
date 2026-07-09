@@ -23,6 +23,8 @@ bun run tg login --phone      # or log in with phone number + code
 bun run tg send me "ping"     # message yourself (Saved Messages)
 bun run tg send @user "hi"    # message someone
 bun run tg bookmarks          # export Saved Messages to saved-messages.md
+                              # keeps rich formatting, tags, and reply links
+bun run tg bookmarks --download-media   # also save photos/files next to the export
 bun run tg bot login          # set up your notification bot (token from @BotFather)
 bun run tg notify "done!"     # push notification via your own bot
 bun run tg notify --html "<b>Build passed</b> ✅ <a href='https://example.com'>logs</a>"

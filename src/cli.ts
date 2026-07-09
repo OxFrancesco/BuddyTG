@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { SentCode } from "@mtcute/core"
+import { md } from "@mtcute/markdown-parser"
 import { Console, Effect, Redacted } from "effect"
 import qrcode from "qrcode-terminal"
 import { botApi, KC_BOT_TOKEN, KC_CHAT_ID, loadBotToken } from "./bot"
@@ -23,6 +24,7 @@ Usage:
   tg login --phone          Log in with phone number + code instead
   tg send <peer> <message>  Send a message ("me", @username, or phone number)
   tg bookmarks [file]       Export all Saved Messages to a markdown file (default: saved-messages.md)
+     --download-media       Also download media files next to the export
   tg bot login              Set up your notification bot (token from @BotFather)
   tg notify <message>       Notify yourself via your own bot (real push notification)
      --html                 Parse message as HTML (<b>, <i>, <code>, <a href>, <tg-spoiler>...)
@@ -112,7 +114,7 @@ const send = (peer: string, message: string) =>
     yield* Console.log(`Sent (message id ${msg.id}).`)
   }).pipe(Effect.scoped)
 
-const bookmarks = (file = "saved-messages.md") =>
+const bookmarks = (file = "saved-messages.md", downloadMedia = false) =>
   Effect.gen(function* () {
     const client = yield* makeAuthedClient
     const messages = yield* tg(async () => {
@@ -120,12 +122,17 @@ const bookmarks = (file = "saved-messages.md") =>
       for await (const msg of client.iterHistory("me")) all.push(msg)
       return all.reverse() // oldest first
     })
-    yield* saveSession(client)
 
+    const mediaDir = file.replace(/\.md$/, "") + "-media"
     const lines = ["# Saved Messages", ""]
     for (const msg of messages) {
       const date = msg.date.toISOString().replace("T", " ").slice(0, 16)
-      lines.push(`## ${date} (id ${msg.id})`, "")
+      lines.push(`## ${date} (id ${msg.id}) <a id="id-${msg.id}"></a>`, "")
+
+      // reply hierarchy: link back to the quoted message
+      const replyId = msg.replyToMessage?.id
+      if (replyId != null) lines.push(`> ↩️ replying to [message ${replyId}](#id-${replyId})`, "")
+
       if (msg.forward) {
         const sender = msg.forward.sender
         const from =
@@ -134,10 +141,34 @@ const bookmarks = (file = "saved-messages.md") =>
           "unknown"
         lines.push(`> Forwarded from: ${from}`, "")
       }
-      if (msg.media) lines.push(`*[media: ${msg.media.type}]*`, "")
-      if (msg.text) lines.push(msg.text, "")
+
+      // tags (Saved Messages tags are reactions under the hood)
+      const tags = (msg.reactions?.reactions ?? [])
+        .map((r) => (typeof r.emoji === "string" ? r.emoji : "[custom]"))
+        .filter((e) => e !== "[custom]")
+      if (tags.length > 0) lines.push(`Tags: ${tags.join(" ")}`, "")
+
+      if (msg.media) {
+        let marker = `*[media: ${msg.media.type}]*`
+        if (downloadMedia && "fileId" in msg.media) {
+          const media = msg.media as { fileName?: string | null; mimeType?: string }
+          const ext =
+            media.fileName?.match(/\.\w+$/)?.[0] ?? `.${media.mimeType?.split("/")[1] ?? "bin"}`
+          const path = `${mediaDir}/${msg.id}-${msg.media.type}${ext}`
+          const ok = yield* tg(() => client.downloadToFile(path, msg.media as never)).pipe(
+            Effect.as(true),
+            Effect.catchAll(() => Effect.succeed(false)),
+          )
+          if (ok) marker = `![media: ${msg.media.type}](${path})`
+        }
+        lines.push(marker, "")
+      }
+
+      // rich text: convert Telegram entities back to markdown
+      if (msg.text) lines.push(md.unparse(msg.textWithEntities), "")
     }
 
+    yield* saveSession(client)
     yield* Effect.promise(() => Bun.write(file, lines.join("\n")))
     yield* Console.log(`Exported ${messages.length} saved message(s) to ${file}`)
   }).pipe(Effect.scoped)
@@ -225,7 +256,7 @@ const program =
         : undefined,
       silent: flags.includes("--silent"),
     })
-  : cmd === "bookmarks" ? bookmarks(rest[0])
+  : cmd === "bookmarks" ? bookmarks(args[0], flags.includes("--download-media"))
   : cmd === "whoami" ? whoami
   : cmd === "logout" ? logout
   : Console.log(usage).pipe(Effect.andThen(Effect.sync(() => process.exit(cmd ? 1 : 0))))
