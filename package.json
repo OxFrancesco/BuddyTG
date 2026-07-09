@@ -1,0 +1,23 @@
+{
+  "name": "tg-ping-ping",
+  "module": "src/cli.ts",
+  "type": "module",
+  "scripts": {
+    "tg": "bun src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/cli.ts --compile --outfile dist/tg"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@mtcute/bun": "^0.30.3",
+    "@types/qrcode-terminal": "^0.12.2",
+    "effect": "^3.21.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
