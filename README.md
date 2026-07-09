@@ -6,7 +6,8 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 
 ## What it can do
 
-- Send messages as your Telegram user to Saved Messages, usernames, or phone numbers
+- Send messages as your Telegram user to Saved Messages, usernames, phone numbers, groups, and channels
+- List your chats, groups, and channels with the IDs needed to message them
 - Sign in with a QR code or phone number
 - Export Saved Messages to Markdown, preserving rich text, tags, forwards, and reply links
 - Optionally download media alongside an export
@@ -54,9 +55,27 @@ All source-checkout examples use `bun run buddytg`. If you build and install the
 bun run buddytg send me "Saved for later"
 bun run buddytg send @username "Hello"
 bun run buddytg send +391234567890 "Hello"
+
+# Groups and channels: by ID (see `chats`), public username, or t.me link
+bun run buddytg send -1001234567890 "Hello group"
+bun run buddytg send @publicgroup "Hello"
+bun run buddytg send https://t.me/publicgroup "Hello"
 ```
 
 Quote messages containing shell metacharacters or spaces.
+
+### List chats and groups
+
+```bash
+# List your most recent 50 dialogs with their IDs
+bun run buddytg chats
+
+# Filter by name or username, adjust the limit, include archived chats
+bun run buddytg chats defai
+bun run buddytg chats --limit 200 --archived
+```
+
+Use the printed ID as the `<peer>` argument for `send`. Negative IDs identify groups and channels.
 
 ### Export Saved Messages
 

@@ -22,7 +22,11 @@ const usage = `BuddyTG — send Telegram messages as yourself
 Usage:
   buddytg login                  Log in by scanning a QR code from the Telegram app (default)
   buddytg login --phone          Log in with phone number + code instead
-  buddytg send <peer> <message>  Send a message ("me", @username, or phone number)
+  buddytg send <peer> <message>  Send a message ("me", @username, phone number,
+                                 chat/group ID from \`buddytg chats\`, or t.me link)
+  buddytg chats [query]          List your chats/groups/channels with their IDs
+     --limit <n>            Max dialogs to list (default: 50)
+     --archived             Include archived chats
   buddytg bookmarks [file]       Export all Saved Messages to a markdown file (default: saved-messages.md)
      --download-media       Also download media files next to the export
   buddytg bot login              Set up your notification bot (token from @BotFather)
@@ -105,13 +109,70 @@ const loginWithPhone = (client: import("@mtcute/bun").TelegramClient) =>
     )
   })
 
+/** Turn a CLI peer argument into something mtcute can resolve. */
+const resolveTarget = (client: import("@mtcute/bun").TelegramClient, peer: string) =>
+  tg(async () => {
+    // t.me links (public usernames, invite links, etc.) -> look up the chat
+    if (/^(https?:\/\/)?t\.me\//i.test(peer)) {
+      const chat = await client.getChat(peer)
+      return chat.inputPeer
+    }
+    // numeric IDs (marked IDs like -100..., -..., or plain user IDs)
+    if (/^-?\d+$/.test(peer)) return client.resolvePeer(Number(peer))
+    // "me", @username, phone number
+    return client.resolvePeer(peer)
+  })
+
 const send = (peer: string, message: string) =>
   Effect.gen(function* () {
     const client = yield* makeAuthedClient
-    const resolved = yield* tg(() => client.resolvePeer(peer))
+    const resolved = yield* resolveTarget(client, peer)
     const msg = yield* tg(() => client.sendText(resolved, message))
     yield* saveSession(client)
     yield* Console.log(`Sent (message id ${msg.id}).`)
+  }).pipe(Effect.scoped)
+
+const chats = (query: string | undefined, opts: { limit: number; archived: boolean }) =>
+  Effect.gen(function* () {
+    const client = yield* makeAuthedClient
+    const dialogs = yield* tg(async () => {
+      const all = []
+      for await (const dialog of client.iterDialogs({
+        limit: opts.limit,
+        archived: opts.archived ? "keep" : "exclude",
+      }))
+        all.push(dialog)
+      return all
+    })
+
+    const q = query?.toLowerCase()
+    const rows = dialogs
+      .map((d) => {
+        const peer = d.peer
+        const type = peer.type === "user" ? (peer.isBot ? "bot" : "user") : peer.chatType
+        return { id: peer.id, type, name: peer.displayName, username: peer.username }
+      })
+      .filter(
+        (r) =>
+          !q ||
+          r.name.toLowerCase().includes(q) ||
+          (r.username?.toLowerCase().includes(q) ?? false),
+      )
+
+    if (rows.length === 0) {
+      yield* Console.log(q ? `No chats matching "${query}".` : "No chats found.")
+    } else {
+      const idWidth = Math.max(...rows.map((r) => String(r.id).length))
+      const typeWidth = Math.max(...rows.map((r) => r.type.length))
+      for (const r of rows) {
+        const handle = r.username ? ` (@${r.username})` : ""
+        yield* Console.log(
+          `${String(r.id).padStart(idWidth)}  ${r.type.padEnd(typeWidth)}  ${r.name}${handle}`,
+        )
+      }
+      yield* Console.log(`\n${rows.length} chat(s). Send with: buddytg send <id> "message"`)
+    }
+    yield* saveSession(client)
   }).pipe(Effect.scoped)
 
 const bookmarks = (file = "saved-messages.md", downloadMedia = false) =>
@@ -244,6 +305,11 @@ const [cmd, ...rest] = process.argv.slice(2)
 const flags = rest.filter((a) => a.startsWith("--"))
 const args = rest.filter((a) => !a.startsWith("--"))
 
+const flagValue = (name: string) => {
+  const i = rest.indexOf(name)
+  return i !== -1 && rest[i + 1] && !rest[i + 1]!.startsWith("--") ? rest[i + 1] : undefined
+}
+
 const program =
   cmd === "login" ? login(flags.includes("--phone"))
   : cmd === "send" && rest.length >= 2 ? send(rest[0]!, rest.slice(1).join(" "))
@@ -255,6 +321,11 @@ const program =
         : flags.includes("--markdown") ? "MarkdownV2"
         : undefined,
       silent: flags.includes("--silent"),
+    })
+  : cmd === "chats" ?
+    chats(args.find((a) => a !== flagValue("--limit")), {
+      limit: Number(flagValue("--limit") ?? 50),
+      archived: flags.includes("--archived"),
     })
   : cmd === "bookmarks" ? bookmarks(args[0], flags.includes("--download-media"))
   : cmd === "whoami" ? whoami
