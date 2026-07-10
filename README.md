@@ -62,7 +62,10 @@ bun run buddytg send @publicgroup "Hello"
 bun run buddytg send https://t.me/publicgroup "Hello"
 ```
 
-Quote messages containing shell metacharacters or spaces.
+The examples above contain fixed literals. When a message or peer comes from a user,
+Telegram, or another program, pass it as a separate argv element (for example with
+`Bun.spawn(["bun", "run", "buddytg", "send", peer, message])`). Do not paste dynamic
+text into shell source: double quotes still evaluate command substitutions and backticks.
 
 ### List chats and groups
 
@@ -70,7 +73,7 @@ Quote messages containing shell metacharacters or spaces.
 # List your most recent 50 dialogs with their IDs
 bun run buddytg chats
 
-# Filter by name or username, adjust the limit, include archived chats
+# Filter by name or username, cap matching results, include archived chats
 bun run buddytg chats defai
 bun run buddytg chats --limit 200 --archived
 ```
@@ -169,17 +172,20 @@ bun run buddytg
 Useful checks:
 
 ```bash
+bun run test
 bun run typecheck
 bun run build
 ```
 
-There is currently no automated test suite. Keep command behavior and examples in this README aligned with the usage text in `src/cli.ts`.
+Keep command behavior and examples in this README aligned with the usage text in `src/cli.ts`.
 
 ### Project structure
 
 | Path | Responsibility |
 | --- | --- |
 | `src/cli.ts` | Command parsing and command implementations |
+| `src/chats.ts` | Chat-list argument parsing, filtering, and display rows |
+| `src/peer-target.ts` | Safe resolution of IDs, phone numbers, and Telegram links |
 | `src/telegram.ts` | MTProto clients, authentication state, and session persistence |
 | `src/bot.ts` | Telegram Bot API calls and bot token loading |
 | `src/keychain.ts` | Effect service backed by the macOS Keychain |

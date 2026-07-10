@@ -4,7 +4,9 @@ import { md } from "@mtcute/markdown-parser"
 import { Console, Effect, Redacted } from "effect"
 import qrcode from "qrcode-terminal"
 import { botApi, KC_BOT_TOKEN, KC_CHAT_ID, loadBotToken } from "./bot"
+import { collectChatRows, parseChatsArgs, type ChatsOptions } from "./chats"
 import { Keychain, KeychainLive } from "./keychain"
+import { resolveSendTarget } from "./peer-target"
 import { prompt, promptSecret } from "./prompt"
 import {
   KC_API_HASH,
@@ -25,7 +27,7 @@ Usage:
   buddytg send <peer> <message>  Send a message ("me", @username, phone number,
                                  chat/group ID from \`buddytg chats\`, or t.me link)
   buddytg chats [query]          List your chats/groups/channels with their IDs
-     --limit <n>            Max dialogs to list (default: 50)
+     --limit <n>            Max matching dialogs to list (default: 50)
      --archived             Include archived chats
   buddytg bookmarks [file]       Export all Saved Messages to a markdown file (default: saved-messages.md)
      --download-media       Also download media files next to the export
@@ -109,65 +111,37 @@ const loginWithPhone = (client: import("@mtcute/bun").TelegramClient) =>
     )
   })
 
-/** Turn a CLI peer argument into something mtcute can resolve. */
-const resolveTarget = (client: import("@mtcute/bun").TelegramClient, peer: string) =>
-  tg(async () => {
-    // t.me links (public usernames, invite links, etc.) -> look up the chat
-    if (/^(https?:\/\/)?t\.me\//i.test(peer)) {
-      const chat = await client.getChat(peer)
-      return chat.inputPeer
-    }
-    // numeric IDs (marked IDs like -100..., -..., or plain user IDs)
-    if (/^-?\d+$/.test(peer)) return client.resolvePeer(Number(peer))
-    // "me", @username, phone number
-    return client.resolvePeer(peer)
-  })
-
 const send = (peer: string, message: string) =>
   Effect.gen(function* () {
     const client = yield* makeAuthedClient
-    const resolved = yield* resolveTarget(client, peer)
+    const resolved = yield* tg(() => resolveSendTarget(client, peer))
     const msg = yield* tg(() => client.sendText(resolved, message))
     yield* saveSession(client)
     yield* Console.log(`Sent (message id ${msg.id}).`)
   }).pipe(Effect.scoped)
 
-const chats = (query: string | undefined, opts: { limit: number; archived: boolean }) =>
+const chats = (opts: ChatsOptions) =>
   Effect.gen(function* () {
     const client = yield* makeAuthedClient
-    const dialogs = yield* tg(async () => {
-      const all = []
-      for await (const dialog of client.iterDialogs({
-        limit: opts.limit,
-        archived: opts.archived ? "keep" : "exclude",
-      }))
-        all.push(dialog)
-      return all
-    })
-
-    const q = query?.toLowerCase()
-    const rows = dialogs
-      .map((d) => {
-        const peer = d.peer
-        const type = peer.type === "user" ? (peer.isBot ? "bot" : "user") : peer.chatType
-        return { id: peer.id, type, name: peer.displayName, username: peer.username }
-      })
-      .filter(
-        (r) =>
-          !q ||
-          r.name.toLowerCase().includes(q) ||
-          (r.username?.toLowerCase().includes(q) ?? false),
-      )
+    const rows = yield* tg(() =>
+      collectChatRows(
+        client.iterDialogs({
+          ...(opts.query === undefined ? { limit: opts.limit } : {}),
+          archived: opts.archived ? "keep" : "exclude",
+        }),
+        opts,
+      ),
+    )
 
     if (rows.length === 0) {
-      yield* Console.log(q ? `No chats matching "${query}".` : "No chats found.")
+      yield* Console.log(opts.query ? `No chats matching "${opts.query}".` : "No chats found.")
     } else {
-      const idWidth = Math.max(...rows.map((r) => String(r.id).length))
-      const typeWidth = Math.max(...rows.map((r) => r.type.length))
-      for (const r of rows) {
-        const handle = r.username ? ` (@${r.username})` : ""
+      const idWidth = Math.max(...rows.map((row) => String(row.id).length))
+      const typeWidth = Math.max(...rows.map((row) => row.type.length))
+      for (const row of rows) {
+        const handle = row.username ? ` (@${row.username})` : ""
         yield* Console.log(
-          `${String(r.id).padStart(idWidth)}  ${r.type.padEnd(typeWidth)}  ${r.name}${handle}`,
+          `${String(row.id).padStart(idWidth)}  ${row.type.padEnd(typeWidth)}  ${row.name}${handle}`,
         )
       }
       yield* Console.log(`\n${rows.length} chat(s). Send with: buddytg send <id> "message"`)
@@ -305,32 +279,42 @@ const [cmd, ...rest] = process.argv.slice(2)
 const flags = rest.filter((a) => a.startsWith("--"))
 const args = rest.filter((a) => !a.startsWith("--"))
 
-const flagValue = (name: string) => {
-  const i = rest.indexOf(name)
-  return i !== -1 && rest[i + 1] && !rest[i + 1]!.startsWith("--") ? rest[i + 1] : undefined
-}
+const program = (() => {
+  switch (cmd) {
+    case "login":
+      return login(flags.includes("--phone"))
+    case "send":
+      if (rest.length >= 2) return send(rest[0]!, rest.slice(1).join(" "))
+      break
+    case "bot":
+      if (args[0] === "login") return botLogin
+      break
+    case "notify":
+      if (args.length >= 1) {
+        return notify(args.join(" "), {
+          parseMode:
+            flags.includes("--html") ? "HTML"
+            : flags.includes("--markdown") ? "MarkdownV2"
+            : undefined,
+          silent: flags.includes("--silent"),
+        })
+      }
+      break
+    case "chats":
+      return Effect.try({
+        try: () => parseChatsArgs(rest),
+        catch: (error) => error instanceof Error ? error : new Error(String(error)),
+      }).pipe(Effect.flatMap(chats))
+    case "bookmarks":
+      return bookmarks(args[0], flags.includes("--download-media"))
+    case "whoami":
+      return whoami
+    case "logout":
+      return logout
+  }
 
-const program =
-  cmd === "login" ? login(flags.includes("--phone"))
-  : cmd === "send" && rest.length >= 2 ? send(rest[0]!, rest.slice(1).join(" "))
-  : cmd === "bot" && args[0] === "login" ? botLogin
-  : cmd === "notify" && args.length >= 1 ?
-    notify(args.join(" "), {
-      parseMode:
-        flags.includes("--html") ? "HTML"
-        : flags.includes("--markdown") ? "MarkdownV2"
-        : undefined,
-      silent: flags.includes("--silent"),
-    })
-  : cmd === "chats" ?
-    chats(args.find((a) => a !== flagValue("--limit")), {
-      limit: Number(flagValue("--limit") ?? 50),
-      archived: flags.includes("--archived"),
-    })
-  : cmd === "bookmarks" ? bookmarks(args[0], flags.includes("--download-media"))
-  : cmd === "whoami" ? whoami
-  : cmd === "logout" ? logout
-  : Console.log(usage).pipe(Effect.andThen(Effect.sync(() => process.exit(cmd ? 1 : 0))))
+  return Console.log(usage).pipe(Effect.andThen(Effect.sync(() => process.exit(cmd ? 1 : 0))))
+})()
 
 Effect.runPromise(program.pipe(Effect.provide(KeychainLive))).then(
   () => process.exit(0),
