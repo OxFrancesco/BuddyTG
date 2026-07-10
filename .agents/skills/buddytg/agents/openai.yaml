@@ -1,0 +1,4 @@
+interface:
+  display_name: "BuddyTG CLI"
+  short_description: "Operate Telegram safely from the local CLI"
+  default_prompt: "Use $buddytg to export my Saved Messages to Markdown and summarize the result."
