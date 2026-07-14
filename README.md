@@ -7,6 +7,8 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 ## What it can do
 
 - Send messages as your Telegram user to Saved Messages, usernames, phone numbers, groups, and channels
+- Send one explicitly confirmed local file as an exact document or validated native photo
+- Download one Telegram attachment to a private local file without overwriting
 - List your chats, groups, and channels with the IDs needed to message them
 - Sign in with a QR code or phone number
 - Export Saved Messages to Markdown, preserving rich text, tags, forwards, and reply links
@@ -66,6 +68,65 @@ The examples above contain fixed literals. When a message or peer comes from a u
 Telegram, or another program, pass it as a separate argv element (for example with
 `Bun.spawn(["bun", "run", "buddytg", "send", peer, message])`). Do not paste dynamic
 text into shell source: double quotes still evaluate command substitutions and backticks.
+
+### Send a file safely
+
+Send exactly one regular local file. BuddyTG resolves the recipient, prints the resolved
+name and stable Telegram ID plus the local file manifest, and then asks you to type that
+exact ID before it starts the upload:
+
+```bash
+bun run buddytg file send me archive.zip
+bun run buddytg file send @username photo.jpg --caption "From the trip"
+bun run buddytg file send @username photo.jpg --as photo
+```
+
+The default `document` mode preserves the uploaded bytes. `--as photo` opts into Telegram's
+native photo handling and accepts only files with JPEG, PNG, or WebP signatures; Telegram may
+process a native photo. URLs, directories, empty files, and final-component symbolic links are
+rejected. BuddyTG holds the opened file descriptor across confirmation and refuses an in-place
+change detected between the manifest and upload.
+
+For a non-interactive caller, omit the confirmation flag on the first run. BuddyTG prints the
+resolved manifest and exits without uploading. Re-run with the ID it printed:
+
+```bash
+bun run buddytg file send @username archive.zip --confirm-to 123456789
+```
+
+`--confirm-to` must equal the resolved recipient ID. There is intentionally no generic `--yes`
+or recursive/directory upload. Regular accounts are preflighted against mtcute's 2000 MiB limit;
+Premium accounts use its 4000 MiB limit. Caption ceilings are also validated before upload.
+
+### Download a file safely
+
+Download a single attachment by source peer and message ID, or paste a copied `t.me` message
+link. `--to` is required and must identify an existing, non-symlink directory:
+
+```bash
+bun run buddytg file download me 123 --to ~/Downloads
+bun run buddytg file download -1001234567890 456 --to ~/Downloads
+bun run buddytg file download https://t.me/publicgroup/456 --to ~/Downloads
+```
+
+Before writing, BuddyTG prints the resolved source ID, remote metadata, exact destination, and
+size ceiling, then asks you to type the source ID. For non-interactive use, pass the matching ID:
+
+```bash
+bun run buddytg file download me 123 --to ~/Downloads --confirm-from 123456789
+```
+
+Use `--name invoice.pdf` to choose a plain filename. The default download ceiling is 2 GiB;
+raise it explicitly with a value such as `--max-size 3000MiB` (maximum 4000 MiB). Remote names
+are sanitized, terminal control characters are escaped, content-protected media is refused,
+and an existing destination is never replaced. Data streams into a hidden `0600` temporary
+file in the chosen directory, is size-checked, synced, and atomically published only when
+complete. Partial data is removed after failures or interruption.
+
+Saved Messages exports include message IDs, so `bookmarks` is one convenient way to find the
+ID for a Saved Messages attachment. A copied Telegram message link is usually easiest for
+groups and channels. Message links are parsed only as Telegram identifiers; BuddyTG never
+fetches arbitrary web URLs for file transfer.
 
 ### List chats and groups
 
@@ -183,8 +244,10 @@ Keep command behavior and examples in this README aligned with the usage text in
 
 | Path | Responsibility |
 | --- | --- |
-| `src/cli.ts` | Command parsing and command implementations |
+| `src/cli.ts` | Top-level command dispatch and the existing account/message commands |
 | `src/chats.ts` | Chat-list argument parsing, filtering, and display rows |
+| `src/file-commands.ts` | Confirmed Telegram upload/download orchestration and progress reporting |
+| `src/file-transfer.ts` | File argument parsing, local preflight, validation, and private atomic writes |
 | `src/peer-target.ts` | Safe resolution of IDs, phone numbers, and Telegram links |
 | `src/telegram.ts` | MTProto clients, authentication state, and session persistence |
 | `src/bot.ts` | Telegram Bot API calls and bot token loading |
@@ -199,3 +262,6 @@ The Telegram client uses in-memory storage. After authenticated operations, its 
 - BuddyTG stores secrets in the macOS Keychain unless an environment variable overrides them.
 - Message contents still pass through Telegram's user or bot APIs as required by the selected command.
 - Markdown exports and downloaded media contain your Telegram data; choose their destination and permissions accordingly.
+- File uploads never accept a URL or directory and do not begin before the exact resolved recipient ID is confirmed.
+- Direct downloads refuse collisions, use private temporary files, enforce a streaming size limit, and publish only complete data.
+- A successful upload is reported only with Telegram's returned message ID. If an upload started but Telegram did not return an ID, BuddyTG reports delivery as unknown instead of claiming success.

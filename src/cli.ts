@@ -5,6 +5,8 @@ import { Console, Effect, Redacted } from "effect"
 import qrcode from "qrcode-terminal"
 import { botApi, KC_BOT_TOKEN, KC_CHAT_ID, loadBotToken } from "./bot"
 import { collectChatRows, parseChatsArgs, type ChatsOptions } from "./chats"
+import { downloadFileCommand, sendFileCommand } from "./file-commands"
+import { parseFileCommand } from "./file-transfer"
 import { Keychain, KeychainLive } from "./keychain"
 import { resolveSendTarget } from "./peer-target"
 import { prompt, promptSecret } from "./prompt"
@@ -19,13 +21,24 @@ import {
   tg,
 } from "./telegram"
 
-const usage = `BuddyTG — send Telegram messages as yourself
+const usage = `BuddyTG — send Telegram messages and files as yourself
 
 Usage:
   buddytg login                  Log in by scanning a QR code from the Telegram app (default)
   buddytg login --phone          Log in with phone number + code instead
   buddytg send <peer> <message>  Send a message ("me", @username, phone number,
                                  chat/group ID from \`buddytg chats\`, or t.me link)
+  buddytg file send <peer> <path>  Send one local file after exact recipient confirmation
+     --caption <text>        Add a caption
+     --as <document|photo>   Preserve exact bytes (default), or send a validated native photo
+     --confirm-to <id>       Non-interactive confirmation; must match the resolved recipient ID
+  buddytg file download <peer> <message-id> --to <directory>
+                                 Download one message attachment without overwriting
+  buddytg file download <t.me-message-link> --to <directory>
+                                 Download directly from a copied Telegram message link
+     --name <filename>       Choose a plain destination filename
+     --max-size <size>       Download ceiling (default: 2GiB; max: 4000MiB)
+     --confirm-from <id>     Non-interactive confirmation; must match the resolved source ID
   buddytg chats [query]          List your chats/groups/channels with their IDs
      --limit <n>            Max matching dialogs to list (default: 50)
      --archived             Include archived chats
@@ -286,6 +299,15 @@ const program = (() => {
     case "send":
       if (rest.length >= 2) return send(rest[0]!, rest.slice(1).join(" "))
       break
+    case "file":
+      return Effect.try({
+        try: () => parseFileCommand(rest),
+        catch: (error) => error instanceof Error ? error : new Error(String(error)),
+      }).pipe(
+        Effect.flatMap((fileCommand) =>
+          fileCommand.action === "send" ? sendFileCommand(fileCommand) : downloadFileCommand(fileCommand),
+        ),
+      )
     case "bot":
       if (args[0] === "login") return botLogin
       break

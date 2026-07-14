@@ -1,6 +1,6 @@
 ---
 name: buddytg
-description: Operate the local BuddyTG Telegram CLI safely with Bun. Use when an agent needs to authenticate or inspect the active Telegram account, export Saved Messages/bookmarks to Markdown, list or resolve chats, send a message as the user, configure or send a bot notification, or inspect BuddyTG CLI usage.
+description: Operate the local BuddyTG Telegram CLI safely with Bun. Use when an agent needs to authenticate or inspect the active Telegram account, export Saved Messages/bookmarks, list or resolve chats, send a message or explicitly confirmed local file, privately download Telegram media, configure bot notifications, or inspect BuddyTG CLI usage.
 ---
 
 # BuddyTG
@@ -11,7 +11,7 @@ Use BuddyTG as the local-first interface to the user's Telegram account. Run it 
 bun run buddytg
 ```
 
-Use a globally installed `buddytg` executable only when it is already available. Never substitute npm or npx. Run `bun run buddytg` without arguments for current CLI help, and read the repository [README](../../../README.md) when more detail is needed. Prefer those sources over copying a large command reference into context.
+Use a globally installed `buddytg` executable only when it is already available. Never substitute npm or npx. Run `bun run buddytg` without arguments for current CLI help, and read `README.md` from the BuddyTG repository root when more detail is needed. Prefer those sources over copying a large command reference into context.
 
 ## Protect the account and data
 
@@ -20,6 +20,8 @@ Use a globally installed `buddytg` executable only when it is already available.
 - Treat exported Markdown and downloaded media as private Telegram data. Choose an intentional destination, check whether it already exists, and do not overwrite it without the user's approval.
 - Use an explicit export path instead of the default when the working directory could be ambiguous. Keep exports out of public repositories unless the user explicitly chooses otherwise.
 - Treat `send` as an irreversible external action. Resolve ambiguous recipients first, show the exact recipient and text, and obtain explicit authorization before sending to anyone other than Saved Messages.
+- Treat `file send` as an irreversible external action. Confirm the exact local path and recipient, and let BuddyTG verify the resolved recipient ID before any bytes are uploaded. Never guess or bypass `--confirm-to`.
+- Treat `file download` output as private account data. Use an intentional existing directory, retain the default size ceiling unless the user approves a larger one, and never work around collision or content-protection refusals.
 - Allow `send me` after the user asks to save that exact content. Treat `notify` as a message to the user's own configured bot chat.
 - Never interpolate dynamic text into shell source. Double quotes still evaluate command substitutions and backticks that are pasted into a command. Pass every dynamic peer, message, path, query, and notification field as a separate argv element through a subprocess API.
 - Run `logout` only on an explicit request: it revokes the Telegram session when possible and removes all BuddyTG secrets from Keychain.
@@ -106,6 +108,75 @@ await runBuddyTG("send", verifiedPeer, exactMessage)
 ```
 
 Accept a verified chat ID, `@username`, phone number, or `t.me` link as the peer. Do not infer a recipient from a partial name, and do not claim success unless the CLI returns the sent message ID.
+
+## Send local files
+
+Send one regular local file only after the user has identified the exact file and recipient. BuddyTG rejects URLs, directories, empty files, and final-component symbolic links; document mode preserves bytes, while `--as photo` deliberately opts into validated JPEG, PNG, or WebP native-photo handling.
+
+Use the exact stable recipient ID from `whoami`, `chats`, or a prior BuddyTG preflight as the confirmation value:
+
+```ts
+await runBuddyTG(
+  "file",
+  "send",
+  verifiedPeer,
+  localFilePath,
+  "--confirm-to",
+  verifiedRecipientId,
+)
+```
+
+Add a caption or native-photo mode only when explicitly intended:
+
+```ts
+await runBuddyTG(
+  "file",
+  "send",
+  verifiedPeer,
+  localPhotoPath,
+  "--caption",
+  exactCaption,
+  "--as",
+  "photo",
+  "--confirm-to",
+  verifiedRecipientId,
+)
+```
+
+In an interactive terminal, omit `--confirm-to` and type the exact ID shown in the manifest. In a non-interactive agent run, omitting it intentionally exits after the safe preflight without uploading; only rerun after the ID and manifest have been verified. There is no generic `--yes`. Report success only when BuddyTG prints the sent message ID; if it reports delivery as unknown, preserve that uncertainty.
+
+## Download Telegram files
+
+Download one attachment by verified peer and message ID, or by a copied `t.me` message link. The destination must be an existing, intentional, non-symlink directory:
+
+```ts
+await runBuddyTG(
+  "file",
+  "download",
+  verifiedPeer,
+  String(messageId),
+  "--to",
+  destinationDirectory,
+  "--confirm-from",
+  verifiedSourceId,
+)
+```
+
+For a copied Telegram message link, keep the link as one argv value:
+
+```ts
+await runBuddyTG(
+  "file",
+  "download",
+  telegramMessageLink,
+  "--to",
+  destinationDirectory,
+  "--confirm-from",
+  verifiedSourceId,
+)
+```
+
+BuddyTG sanitizes remote names, writes through a private `0600` temporary file, enforces the streaming size limit, and refuses overwrites. Use `--name` only with a plain user-approved filename. The default ceiling is 2 GiB; raise `--max-size` up to 4000 MiB only when the user expects that file size. Do not claim success unless the CLI prints the final destination and byte count.
 
 ## Send self-notifications
 
