@@ -9,6 +9,12 @@ Send Francesco a real push notification on Telegram when you finish a task.
 
 ## Command
 
+BuddyTG reads the Telegram session and bot configuration from the macOS Keychain. A
+sandboxed run may be unable to see those entries and can falsely behave as if the user
+or bot is not configured. Run notifications outside the sandbox when possible. If a
+sandboxed attempt requests login or a bot token, retry the exact command with
+`require_escalated` before asking the user to authenticate again.
+
 ```bash
 buddytg notify --html "<message>"
 ```

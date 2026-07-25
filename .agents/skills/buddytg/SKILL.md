@@ -47,6 +47,14 @@ Keep `buddyTgRepo`, peers, messages, paths, queries, and formatted notifications
 
 ## Check or establish the account
 
+BuddyTG authentication lives in the macOS Keychain. Sandboxed commands may be unable
+to read those entries and can falsely report `Not logged in`, request API credentials,
+or start the bot-login flow even when the user is already authenticated. When a
+sandboxed authentication check fails, retry the exact BuddyTG command outside the
+sandbox (use `require_escalated` when available) before concluding that credentials are
+missing. Do not start login or ask the user to re-enter secrets until the unsandboxed
+check also fails.
+
 Check the active identity before account-sensitive work:
 
 ```bash
@@ -179,6 +187,10 @@ await runBuddyTG(
 BuddyTG sanitizes remote names, writes through a private `0600` temporary file, enforces the streaming size limit, and refuses overwrites. Use `--name` only with a plain user-approved filename. The default ceiling is 2 GiB; raise `--max-size` up to 4000 MiB only when the user expects that file size. Do not claim success unless the CLI prints the final destination and byte count.
 
 ## Send self-notifications
+
+If `notify` asks for a bot token after running inside a sandbox, stop that prompt and
+retry the notification outside the sandbox. Ask the user to configure the bot only when
+the unsandboxed attempt also confirms that the token is missing.
 
 Configure the user's notification bot interactively when needed:
 
