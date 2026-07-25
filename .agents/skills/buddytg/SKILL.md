@@ -1,6 +1,6 @@
 ---
 name: buddytg
-description: Operate the local BuddyTG Telegram CLI safely with Bun. Use when an agent needs to authenticate or inspect the active Telegram account, export Saved Messages/bookmarks, list or resolve chats, send a message or explicitly confirmed local file, privately download Telegram media, configure bot notifications, or inspect BuddyTG CLI usage.
+description: Operate the local BuddyTG Telegram CLI safely with Bun. Use when an agent needs to authenticate or inspect the active Telegram account, export Saved Messages/bookmarks, list or resolve chats, send a message or explicitly confirmed local file, privately download Telegram media, configure bot notifications, ask for a correlated Telegram response, bridge coding-agent approvals, or inspect BuddyTG CLI usage.
 ---
 
 # BuddyTG
@@ -23,6 +23,7 @@ Use a globally installed `buddytg` executable only when it is already available.
 - Treat `file send` as an irreversible external action. Confirm the exact local path and recipient, and let BuddyTG verify the resolved recipient ID before any bytes are uploaded. Never guess or bypass `--confirm-to`.
 - Treat `file download` output as private account data. Use an intentional existing directory, retain the default size ceiling unless the user approves a larger one, and never work around collision or content-protection refusals.
 - Allow `send me` after the user asks to save that exact content. Treat `notify` as a message to the user's own configured bot chat.
+- Treat `ask` as a message to the user's own configured bot chat. Approval-hook prompts may include a project name, tool name, and command/input preview, so never add unrelated secrets.
 - Never interpolate dynamic text into shell source. Double quotes still evaluate command substitutions and backticks that are pasted into a command. Pass every dynamic peer, message, path, query, and notification field as a separate argv element through a subprocess API.
 - Run `logout` only on an explicit request: it revokes the Telegram session when possible and removes all BuddyTG secrets from Keychain.
 
@@ -208,3 +209,44 @@ await runBuddyTG("notify", "--silent", lowPriorityMessage)
 ```
 
 Escape dynamic content for the selected parse mode. For agent completion or blocker notifications to Francesco, also follow the dedicated `telegram-notify` skill for its required wording and anti-spam rules.
+
+## Ask for a correlated response
+
+Use `ask` when the running workflow is explicitly allowed to wait for the user. Pass
+questions and options as separate argv values:
+
+```ts
+const answer = await runBuddyTG(
+  "ask",
+  "--option",
+  "allow=Allow once",
+  "--option",
+  "deny=Deny",
+  "--timeout",
+  "540",
+  exactQuestion,
+)
+```
+
+Without `--option`, Telegram opens its Force Reply interface. With options, BuddyTG
+uses inline callback buttons and prints the selected opaque value to stdout. It accepts
+only the configured private chat/user and a reply or callback correlated to that exact
+prompt.
+
+`ask` uses Bot API long polling. Do not run concurrent `ask` processes with the same
+bot token, and do not remove an existing Telegram webhook without explicit permission.
+If Telegram reports that a webhook is configured, use a separate bot or ask the user
+how to proceed.
+
+## Bridge coding-agent approvals
+
+`buddytg hook permission` reads a Codex or Claude Code `PermissionRequest` JSON object
+from stdin, asks with **Allow once** and **Deny** buttons, and writes the shared
+structured decision to stdout. Use it only as a configured command hook; do not pipe
+hand-constructed approval payloads into it.
+
+The BuddyTG repository includes `.codex/hooks.json` and `.claude/settings.json`.
+Review and trust the hook through the agent's `/hooks` UI. For another trusted
+repository with the standalone executable on `PATH`, follow the configuration in
+`README.md`. Hook failures intentionally leave the decision unresolved so the normal
+local approval dialog can take over.

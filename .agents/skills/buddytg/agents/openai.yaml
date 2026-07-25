@@ -1,4 +1,4 @@
 interface:
   display_name: "BuddyTG CLI"
-  short_description: "Operate Telegram safely from the local CLI"
-  default_prompt: "Use $buddytg to safely send or download one Telegram file with exact peer confirmation."
+  short_description: "Operate Telegram and remote approvals safely"
+  default_prompt: "Use $buddytg to safely operate Telegram or collect a correlated response with exact chat and prompt verification."

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/src/cli.ts\" hook permission",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

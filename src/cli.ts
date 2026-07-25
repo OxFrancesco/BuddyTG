@@ -3,12 +3,24 @@ import { SentCode } from "@mtcute/core"
 import { md } from "@mtcute/markdown-parser"
 import { Console, Effect, Redacted } from "effect"
 import qrcode from "qrcode-terminal"
-import { botApi, KC_BOT_TOKEN, KC_CHAT_ID, loadBotToken } from "./bot"
+import { askViaTelegram, parseAskArgs } from "./ask"
+import {
+  botApi,
+  ensureBotChatId,
+  KC_BOT_TOKEN,
+  KC_CHAT_ID,
+  loadBotToken,
+} from "./bot"
 import { collectChatRows, parseChatsArgs, type ChatsOptions } from "./chats"
 import { downloadFileCommand, sendFileCommand } from "./file-commands"
 import { parseFileCommand } from "./file-transfer"
 import { Keychain, KeychainLive } from "./keychain"
 import { resolveSendTarget } from "./peer-target"
+import {
+  formatPermissionQuestion,
+  parsePermissionHookInput,
+  permissionDecisionFor,
+} from "./permission-hook"
 import { prompt, promptSecret } from "./prompt"
 import {
   KC_API_HASH,
@@ -21,7 +33,7 @@ import {
   tg,
 } from "./telegram"
 
-const usage = `BuddyTG — send Telegram messages and files as yourself
+const usage = `BuddyTG — local Telegram automation and safe transfers
 
 Usage:
   buddytg login                  Log in by scanning a QR code from the Telegram app (default)
@@ -49,6 +61,11 @@ Usage:
      --html                 Parse message as HTML (<b>, <i>, <code>, <a href>, <tg-spoiler>...)
      --markdown             Parse message as MarkdownV2 (*bold*, _italic_, \`code\`, [link](url)...)
      --silent               Deliver without sound
+  buddytg ask <question>         Ask in Telegram and print the correlated reply to stdout
+     --option <value>=<label>  Add an inline response button (repeatable, max 8)
+     --timeout <seconds>      Wait up to this many seconds (default: 540; max: 86400)
+     --silent                 Deliver the question without sound
+  buddytg hook permission        Handle a Codex/Claude PermissionRequest via Telegram
   buddytg whoami                 Show the currently logged-in account
   buddytg logout                 Log out and remove all secrets from the Keychain
 
@@ -232,29 +249,19 @@ const botLogin = Effect.gen(function* () {
   const token = Redacted.make(Redacted.value(yield* promptSecret("Bot token: ")).trim())
   const me = yield* botApi(token, "getMe", {}) // validate before saving
   yield* keychain.set(KC_BOT_TOKEN, token)
+  yield* ensureBotChatId
   yield* Console.log(`Bot @${(me as { username?: string }).username} saved to Keychain.`)
   return token
 })
 
 const notify = (message: string, opts: { parseMode?: "HTML" | "MarkdownV2"; silent?: boolean }) =>
   Effect.gen(function* () {
-    const keychain = yield* Keychain
-
     // 1. Bot token (one-time setup via `buddytg bot login`)
     let token = yield* loadBotToken
     if (!token) token = yield* botLogin
 
     // 2. Your chat id — reuse the logged-in user session if we don't have it yet
-    let chatId = yield* keychain.get(KC_CHAT_ID)
-    if (!chatId) {
-      const id = yield* Effect.gen(function* () {
-        const client = yield* makeAuthedClient
-        const me = yield* tg(() => client.getMe())
-        return String(me.id)
-      }).pipe(Effect.scoped)
-      chatId = Redacted.make(id)
-      yield* keychain.set(KC_CHAT_ID, chatId)
-    }
+    const chatId = yield* ensureBotChatId
 
     // 3. Send — rich text via Bot API parse modes (HTML / MarkdownV2)
     yield* botApi(token, "sendMessage", {
@@ -271,6 +278,26 @@ const whoami = Effect.gen(function* () {
   const me = yield* tg(() => client.getMe())
   yield* Console.log(`${me.displayName} (@${me.username ?? "—"}, id ${me.id})`)
 }).pipe(Effect.scoped)
+
+const permissionHook = Effect.gen(function* () {
+  const rawInput = yield* Effect.promise(() => Bun.stdin.text())
+  const input = yield* Effect.try({
+    try: () => parsePermissionHookInput(JSON.parse(rawInput)),
+    catch: (error) => error instanceof Error ? error : new Error(String(error)),
+  })
+  const answer = yield* askViaTelegram({
+    question: formatPermissionQuestion(input),
+    choices: [
+      { value: "allow", label: "Allow once" },
+      { value: "deny", label: "Deny" },
+    ],
+    timeoutSeconds: 540,
+    silent: false,
+  })
+  const decision = permissionDecisionFor(answer)
+  if (!decision) return yield* Effect.fail(new Error("Unknown Telegram approval response"))
+  yield* Console.log(JSON.stringify(decision))
+})
 
 const logout = Effect.gen(function* () {
   const keychain = yield* Keychain
@@ -321,6 +348,17 @@ const program = (() => {
           silent: flags.includes("--silent"),
         })
       }
+      break
+    case "ask":
+      return Effect.try({
+        try: () => parseAskArgs(rest),
+        catch: (error) => error instanceof Error ? error : new Error(String(error)),
+      }).pipe(
+        Effect.flatMap(askViaTelegram),
+        Effect.flatMap((answer) => Console.log(answer)),
+      )
+    case "hook":
+      if (args[0] === "permission") return permissionHook
       break
     case "chats":
       return Effect.try({

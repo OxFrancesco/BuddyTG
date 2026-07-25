@@ -1,6 +1,6 @@
 # BuddyTG
 
-A small, local-first Telegram CLI for macOS. Send messages from your personal Telegram account, export Saved Messages, and deliver push notifications through a bot you control.
+A small, local-first Telegram CLI for macOS. Send messages from your personal Telegram account, export Saved Messages, deliver push notifications, and answer coding-agent approval requests through a bot you control.
 
 BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.website) for application logic, and the macOS Keychain for credentials and sessions. It does not write Telegram credentials or session data to project files.
 
@@ -14,6 +14,8 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 - Export Saved Messages to Markdown, preserving rich text, tags, forwards, and reply links
 - Optionally download media alongside an export
 - Send Telegram push notifications through your own bot, with HTML, MarkdownV2, and silent delivery support
+- Ask a correlated free-text or multiple-choice question and wait for the Telegram response
+- Route Codex and Claude Code permission requests to Telegram approval buttons
 - Keep API credentials, user sessions, bot tokens, and chat IDs in the macOS Keychain
 
 ## Requirements
@@ -177,7 +179,96 @@ bun run buddytg notify --html "<b>Build passed</b>"
 bun run buddytg notify --markdown "*Build passed*"
 ```
 
-`notify` uses the logged-in Telegram user to determine your chat ID the first time, so complete the normal user login before configuring notifications. HTML and MarkdownV2 follow Telegram's supported formatting syntax; escape dynamic or untrusted text before selecting a parse mode.
+`bot login` uses the logged-in Telegram user to determine your private chat ID, so
+complete the normal user login first. HTML and MarkdownV2 follow Telegram's supported
+formatting syntax; escape dynamic or untrusted text before selecting a parse mode.
+
+### Ask from a script and wait for Telegram
+
+`ask` sends a plain Telegram question and waits until you reply to that exact bot
+message. With no options, Telegram opens its native Force Reply interface:
+
+```bash
+bun run buddytg ask "Which branch should I use?"
+```
+
+Add repeatable options to use native inline keyboard buttons instead. The opaque value
+on the left is printed to stdout; the human-readable label on the right is shown in
+Telegram:
+
+```bash
+bun run buddytg ask \
+  --option "main=Use main" \
+  --option "feature=Use feature branch" \
+  --timeout 900 \
+  "Which branch should I use?"
+```
+
+BuddyTG accepts only a reply to the exact prompt message or a callback carrying that
+prompt's random nonce. It also verifies the configured private chat and sender IDs.
+Progress goes to stderr so stdout contains only the answer and can be consumed by a
+hook or another program.
+
+`ask` uses Telegram Bot API [`getUpdates`](https://core.telegram.org/bots/api#getupdates)
+long polling. Telegram does not permit long polling while that bot has an outgoing
+webhook configured, and a bot should have only one active update consumer. Use a
+dedicated BuddyTG bot and do not run concurrent `ask` commands for the same token.
+
+### Answer Codex and Claude Code approvals from Telegram
+
+This repository already contains project-local hook configurations for
+[Codex](https://learn.chatgpt.com/docs/hooks) and
+[Claude Code](https://code.claude.com/docs/en/hooks):
+
+- `.codex/hooks.json`
+- `.claude/settings.json`
+
+They call `bun <repo>/src/cli.ts hook permission`, wait for your Telegram button tap,
+and emit the shared `PermissionRequest` allow/deny JSON response. If Telegram is not
+configured, unavailable, or times out, the hook exits without a decision and the agent
+falls back to its normal local permission dialog.
+
+Set up the bot before starting either agent:
+
+```bash
+bun run buddytg login
+bun run buddytg bot login
+bun run buddytg notify "BuddyTG approvals are ready"
+```
+
+Then:
+
+1. Start Codex or Claude Code from this repository.
+2. Open `/hooks` in the agent.
+3. Review and trust the project-local `PermissionRequest` hook.
+4. Trigger an action that needs approval and tap **Allow once** or **Deny** in Telegram.
+
+For another repository, first install the standalone `buddytg` executable on `PATH`.
+Then add the following handler under `hooks.PermissionRequest` in either
+`.codex/hooks.json` or `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "buddytg hook permission",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Codex loads project hooks only for trusted repositories and requires the current hook
+definition to be reviewed. Claude Code also exposes project hooks through `/hooks`.
+The adapter intentionally offers only one-time allow or deny decisions; it does not
+create persistent allow rules.
 
 ### Inspect or remove the session
 
@@ -202,7 +293,8 @@ Environment variables take precedence over values stored in the Keychain.
 | --- | --- |
 | `TG_API_ID` | Telegram application ID |
 | `TG_API_HASH` | Telegram application hash |
-| `TG_BOT_TOKEN` | Bot API token used by `notify` |
+| `TG_BOT_TOKEN` | Bot API token used by `notify`, `ask`, and approval hooks |
+| `TG_BOT_CHAT_ID` | Private Telegram chat/user ID used by bot commands |
 
 For example:
 
@@ -250,7 +342,9 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/file-transfer.ts` | File argument parsing, local preflight, validation, and private atomic writes |
 | `src/peer-target.ts` | Safe resolution of IDs, phone numbers, and Telegram links |
 | `src/telegram.ts` | MTProto clients, authentication state, and session persistence |
-| `src/bot.ts` | Telegram Bot API calls and bot token loading |
+| `src/bot.ts` | Telegram Bot API calls and bot target loading |
+| `src/ask.ts` | Correlated Force Reply/inline-button questions and long polling |
+| `src/permission-hook.ts` | Shared Codex/Claude permission-hook input and decision mapping |
 | `src/keychain.ts` | Effect service backed by the macOS Keychain |
 | `src/prompt.ts` | Interactive and secret terminal prompts |
 
@@ -261,6 +355,8 @@ The Telegram client uses in-memory storage. After authenticated operations, its 
 - Treat `api_hash`, bot tokens, and exported Telegram sessions as secrets.
 - BuddyTG stores secrets in the macOS Keychain unless an environment variable overrides them.
 - Message contents still pass through Telegram's user or bot APIs as required by the selected command.
+- Approval hooks send the project name, tool name, and approval description or input preview to your configured private Telegram chat.
+- Telegram replies are accepted only from the configured chat and when correlated to the active prompt; use a dedicated bot and protect its token.
 - Markdown exports and downloaded media contain your Telegram data; choose their destination and permissions accordingly.
 - File uploads never accept a URL or directory and do not begin before the exact resolved recipient ID is confirmed.
 - Direct downloads refuse collisions, use private temporary files, enforce a streaming size limit, and publish only complete data.

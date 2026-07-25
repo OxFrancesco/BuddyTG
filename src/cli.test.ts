@@ -38,7 +38,36 @@ test("rejects an invalid download message id before authentication", async () =>
   expect(stderr).not.toContain("Not logged in")
 })
 
-test("shows file transfer safety options in CLI help", async () => {
+test("rejects invalid ask arguments before reading bot configuration", async () => {
+  const { exitCode, stderr } = await runCli("ask", "--option", "approve", "Continue?")
+
+  expect(exitCode).toBe(1)
+  expect(stderr).toContain("--option must use <value>=<label>")
+  expect(stderr).not.toContain("Telegram bot is not configured")
+})
+
+test("rejects malformed permission hook input before reading bot configuration", async () => {
+  const subprocess = Bun.spawn([process.execPath, "src/cli.ts", "hook", "permission"], {
+    cwd: `${import.meta.dir}/..`,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  subprocess.stdin.write("{}")
+  subprocess.stdin.end()
+  const [exitCode, stdout, stderr] = await Promise.all([
+    subprocess.exited,
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text(),
+  ])
+
+  expect(exitCode).toBe(1)
+  expect(stdout).toBe("")
+  expect(stderr).toContain("Permission hook input is missing hook_event_name")
+  expect(stderr).not.toContain("Telegram bot is not configured")
+})
+
+test("shows transfer and response-bridge options in CLI help", async () => {
   const { exitCode, stdout } = await runCli()
 
   expect(exitCode).toBe(0)
@@ -46,4 +75,7 @@ test("shows file transfer safety options in CLI help", async () => {
   expect(stdout).toContain("--confirm-to <id>")
   expect(stdout).toContain("file download <peer> <message-id>")
   expect(stdout).toContain("--confirm-from <id>")
+  expect(stdout).toContain("ask <question>")
+  expect(stdout).toContain("--option <value>=<label>")
+  expect(stdout).toContain("hook permission")
 })
