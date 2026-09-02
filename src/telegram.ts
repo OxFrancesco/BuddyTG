@@ -1,7 +1,8 @@
 import { TelegramClient } from "@mtcute/bun"
 import { MemoryStorage } from "@mtcute/core"
 import { Effect, Redacted } from "effect"
-import { Keychain, KeychainError } from "./keychain"
+import { Keychain } from "./keychain"
+import { createMtprotoTransport, selectMtprotoTransport } from "./mtproto-transport"
 
 export const KC_SESSION = "session"
 export const KC_API_ID = "api-id"
@@ -24,7 +25,7 @@ export const tg = <A>(f: () => Promise<A>) =>
     catch: (e) => new TelegramError(e instanceof Error ? e.message : String(e)),
   })
 
-/** Load API credentials (env vars take priority over Keychain). */
+/** Load API credentials (env vars take priority over the local secret store). */
 export const loadApiCredentials = Effect.gen(function* () {
   const keychain = yield* Keychain
   const envId = process.env.TG_API_ID
@@ -38,22 +39,25 @@ export const loadApiCredentials = Effect.gen(function* () {
 
 /**
  * Acquire a TelegramClient as a scoped resource.
- * Uses in-memory storage; the session lives only in the macOS Keychain.
+ * Uses in-memory storage; the session is persisted in the local secret store.
+ * Linux defaults to WebSocket MTProto; macOS keeps TCP. See `selectMtprotoTransport`.
  */
 export const makeClient = (creds: { apiId: number; apiHash: string }) =>
   Effect.acquireRelease(
-    Effect.sync(
-      () =>
-        new TelegramClient({
-          apiId: creds.apiId,
-          apiHash: creds.apiHash,
-          storage: new MemoryStorage(),
-        }),
-    ),
+    Effect.sync(() => {
+      const selection = selectMtprotoTransport()
+      return new TelegramClient({
+        apiId: creds.apiId,
+        apiHash: creds.apiHash,
+        storage: new MemoryStorage(),
+        transport: createMtprotoTransport(selection),
+        useIpv6: selection.useIpv6,
+      })
+    }),
     (client) => Effect.promise(() => client.destroy().catch(() => {})),
   )
 
-/** Client restored from the Keychain session — for authenticated commands. */
+/** Client restored from the stored session — for authenticated commands. */
 export const makeAuthedClient = Effect.gen(function* () {
   const keychain = yield* Keychain
   const creds = yield* loadApiCredentials

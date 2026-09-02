@@ -9,7 +9,8 @@ Send Francesco a real push notification on Telegram when you finish a task.
 
 ## Command
 
-BuddyTG reads the Telegram session and bot configuration from the macOS Keychain. A
+BuddyTG reads the Telegram session and bot configuration from the local secret
+store (macOS Keychain, or a private user directory on Linux). A
 sandboxed run may be unable to see those entries and can falsely behave as if the user
 or bot is not configured. Run notifications outside the sandbox when possible. If a
 sandboxed attempt requests login or a bot token, retry the exact command with
@@ -50,4 +51,4 @@ For failures or blockers, use `<b>⚠️ ... needs attention</b>` instead of `�
 - Add `--silent` for low-priority FYI messages (no sound).
 - Notify once per completed task, not per step. Do not spam.
 - If the command fails with a missing bot token, run `tg bot login` is required — ask the user, never guess a token.
-- Never print or log the bot token or session; secrets live in the macOS Keychain.
+- Never print or log the bot token or session; secrets live in the local secret store.

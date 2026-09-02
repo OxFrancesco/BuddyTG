@@ -15,7 +15,7 @@ Use a globally installed `buddytg` executable only when it is already available.
 
 ## Protect the account and data
 
-- Keep API credentials, sessions, bot tokens, and chat IDs in the macOS Keychain. Let interactive login prompts collect secrets; never print, persist, commit, or paste them into commands or chat.
+- Keep API credentials, sessions, bot tokens, and chat IDs in the local secret store (macOS Keychain, or `~/.config/buddytg/secrets` on Linux). Let interactive login prompts collect secrets; never print, persist, commit, or paste them into commands or chat.
 - If `TG_API_ID`, `TG_API_HASH`, or `TG_BOT_TOKEN` is already provided by the environment, use it without displaying or inspecting its value.
 - Treat exported Markdown and downloaded media as private Telegram data. Choose an intentional destination, check whether it already exists, and do not overwrite it without the user's approval.
 - Use an explicit export path instead of the default when the working directory could be ambiguous. Keep exports out of public repositories unless the user explicitly chooses otherwise.
@@ -25,7 +25,7 @@ Use a globally installed `buddytg` executable only when it is already available.
 - Allow `send me` after the user asks to save that exact content. Treat `notify` as a message to the user's own configured bot chat.
 - Treat `ask` as a message to the user's own configured bot chat. Approval-hook prompts may include a project name, tool name, and command/input preview, so never add unrelated secrets.
 - Never interpolate dynamic text into shell source. Double quotes still evaluate command substitutions and backticks that are pasted into a command. Pass every dynamic peer, message, path, query, and notification field as a separate argv element through a subprocess API.
-- Run `logout` only on an explicit request: it revokes the Telegram session when possible and removes all BuddyTG secrets from Keychain.
+- Run `logout` only on an explicit request: it revokes the Telegram session when possible and removes all BuddyTG secrets from the local secret store.
 
 ## Pass dynamic values as argv
 
@@ -48,13 +48,14 @@ Keep `buddyTgRepo`, peers, messages, paths, queries, and formatted notifications
 
 ## Check or establish the account
 
-BuddyTG authentication lives in the macOS Keychain. Sandboxed commands may be unable
-to read those entries and can falsely report `Not logged in`, request API credentials,
-or start the bot-login flow even when the user is already authenticated. When a
-sandboxed authentication check fails, retry the exact BuddyTG command outside the
-sandbox (use `require_escalated` when available) before concluding that credentials are
-missing. Do not start login or ask the user to re-enter secrets until the unsandboxed
-check also fails.
+BuddyTG authentication lives in the local secret store (macOS Keychain, or a private
+user directory on Linux). Sandboxed commands may be unable to read those entries
+and can falsely report `Not logged in`, request API credentials, or start the
+bot-login flow even when the user is already authenticated. When a sandboxed
+authentication check fails, retry the exact BuddyTG command outside the sandbox
+(use `require_escalated` when available) before concluding that credentials are
+missing. Do not start login or ask the user to re-enter secrets until the
+unsandboxed check also fails.
 
 Check the active identity before account-sensitive work:
 

@@ -53,4 +53,4 @@ For failures or blockers, use `<b>⚠️ ... needs attention</b>` instead of `�
 - Notify once per completed task, not per step. Do not spam.
 - If the command fails with a missing bot token, ask the user to run `buddytg bot login`
   (or `bun run buddytg bot login` from a source checkout); never guess a token.
-- Never print or log the bot token or session; secrets live in the macOS Keychain.
+- Never print or log the bot token or session; secrets live in the local secret store.
