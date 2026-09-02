@@ -44,4 +44,4 @@ For failures or blockers, use `<b>⚠️ ... needs attention</b>` instead of `�
 - Add `--silent` for low-priority FYI messages (no sound).
 - Notify once per completed task, not per step. Do not spam.
 - If the command fails with a missing bot token, run `tg bot login` is required — ask the user, never guess a token.
-- Never print or log the bot token or session; secrets live in the macOS Keychain.
+- Never print or log the bot token or session; secrets live in the local secret store.

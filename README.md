@@ -1,8 +1,8 @@
 # BuddyTG
 
-A small, local-first Telegram CLI for macOS. Send messages from your personal Telegram account, export Saved Messages, deliver push notifications, and answer coding-agent approval requests through a bot you control.
+A small, local-first Telegram CLI for macOS and Linux. Send messages from your personal Telegram account, export Saved Messages, deliver push notifications, and answer coding-agent approval requests through a bot you control.
 
-BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.website) for application logic, and the macOS Keychain for credentials and sessions. It does not write Telegram credentials or session data to project files.
+BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.website) for application logic, and a local secret store for credentials and sessions. It does not write Telegram credentials or session data to project files.
 
 ## What it can do
 
@@ -16,14 +16,27 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 - Send Telegram push notifications through your own bot, with HTML, MarkdownV2, and silent delivery support
 - Ask a correlated free-text or multiple-choice question and wait for the Telegram response
 - Route Codex and Claude Code permission requests to Telegram approval buttons
-- Keep API credentials, user sessions, bot tokens, and chat IDs in the macOS Keychain
+- Keep API credentials, user sessions, bot tokens, and chat IDs in a local secret store (macOS Keychain, or a private user directory on Linux)
 
 ## Requirements
 
-- macOS, because secure storage currently uses the `security` Keychain CLI
+- macOS or Linux
 - [Bun](https://bun.sh)
 - A Telegram account
 - A Telegram `api_id` and `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps)
+
+## Secret storage
+
+BuddyTG never writes credentials or session data into the git working tree, committed `.env` files, or the README.
+
+- **macOS:** uses the Keychain via the `security` CLI when that command is available.
+- **Linux, and macOS without Keychain:** stores secrets in a private user directory:
+  - `$XDG_CONFIG_HOME/buddytg/secrets` when `XDG_CONFIG_HOME` is set
+  - otherwise `~/.config/buddytg/secrets`
+
+  The directory is created with mode `0700` and each secret file with `0600`.
+
+Set `BUDDYTG_SECRETS_DIR` to an absolute path to use a different file-backed directory (this also selects the file backend on macOS). Do not point it at a repository. Environment variables still override stored values.
 
 ## Quick start
 
@@ -34,7 +47,7 @@ bun install
 bun run buddytg login
 ```
 
-BuddyTG asks for your Telegram API credentials the first time and stores them in the Keychain. For QR login, open Telegram and go to **Settings → Devices → Link Desktop Device**, then scan the code shown in the terminal.
+BuddyTG asks for your Telegram API credentials the first time and stores them in the local secret store. For QR login, open Telegram and go to **Settings → Devices → Link Desktop Device**, then scan the code shown in the terminal.
 
 Confirm the active account and send a message to Saved Messages:
 
@@ -277,7 +290,7 @@ bun run buddytg whoami
 bun run buddytg logout
 ```
 
-`logout` attempts to revoke the Telegram session and removes BuddyTG's API credentials, user session, bot token, and chat ID from the Keychain.
+`logout` attempts to revoke the Telegram session and removes BuddyTG's API credentials, user session, bot token, and chat ID from the local secret store.
 
 Run the CLI without arguments to see its built-in help:
 
@@ -287,7 +300,7 @@ bun run buddytg
 
 ## Environment variables
 
-Environment variables take precedence over values stored in the Keychain.
+Environment variables take precedence over values stored in the local secret store.
 
 | Variable | Purpose |
 | --- | --- |
@@ -295,6 +308,7 @@ Environment variables take precedence over values stored in the Keychain.
 | `TG_API_HASH` | Telegram application hash |
 | `TG_BOT_TOKEN` | Bot API token used by `notify`, `ask`, and approval hooks |
 | `TG_BOT_CHAT_ID` | Private Telegram chat/user ID used by bot commands |
+| `BUDDYTG_SECRETS_DIR` | Optional override for the file-backed secret directory |
 
 For example:
 
@@ -345,15 +359,15 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/bot.ts` | Telegram Bot API calls and bot target loading |
 | `src/ask.ts` | Correlated Force Reply/inline-button questions and long polling |
 | `src/permission-hook.ts` | Shared Codex/Claude permission-hook input and decision mapping |
-| `src/keychain.ts` | Effect service backed by the macOS Keychain |
+| `src/keychain.ts` | Effect secret-store service (macOS Keychain or a private user directory) |
 | `src/prompt.ts` | Interactive and secret terminal prompts |
 
-The Telegram client uses in-memory storage. After authenticated operations, its exported session is persisted under the `buddytg` Keychain service rather than in a local session file.
+The Telegram client uses in-memory storage. After authenticated operations, its exported session is persisted in the local secret store rather than in a session file inside the project.
 
 ## Security notes
 
 - Treat `api_hash`, bot tokens, and exported Telegram sessions as secrets.
-- BuddyTG stores secrets in the macOS Keychain unless an environment variable overrides them.
+- BuddyTG stores secrets in the macOS Keychain or a private `0700` user directory unless an environment variable overrides them.
 - Message contents still pass through Telegram's user or bot APIs as required by the selected command.
 - Approval hooks send the project name, tool name, and approval description or input preview to your configured private Telegram chat.
 - Telegram replies are accepted only from the configured chat and when correlated to the active prompt; use a dedicated bot and protect its token.

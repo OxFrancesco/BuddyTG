@@ -67,11 +67,11 @@ Usage:
      --silent                 Deliver the question without sound
   buddytg hook permission        Handle a Codex/Claude PermissionRequest via Telegram
   buddytg whoami                 Show the currently logged-in account
-  buddytg logout                 Log out and remove all secrets from the Keychain
+  buddytg logout                 Log out and remove all stored secrets
 
 Setup:
   Get your api_id/api_hash from https://my.telegram.org/apps
-  (asked once during login and stored in the Keychain, or set TG_API_ID / TG_API_HASH)`
+  (asked once during login and stored in the local secret store, or set TG_API_ID / TG_API_HASH)`
 
 const login = (usePhone: boolean) =>
   Effect.gen(function* () {
@@ -98,7 +98,7 @@ const login = (usePhone: boolean) =>
 
     // 3. Persist the session securely
     yield* saveSession(client)
-    yield* Console.log(`Logged in as ${user.displayName} (@${user.username ?? "—"}). Session saved to Keychain.`)
+    yield* Console.log(`Logged in as ${user.displayName} (@${user.username ?? "—"}). Session saved to the local secret store.`)
   }).pipe(Effect.scoped)
 
 const loginWithQr = (client: import("@mtcute/bun").TelegramClient) =>
@@ -250,7 +250,7 @@ const botLogin = Effect.gen(function* () {
   const me = yield* botApi(token, "getMe", {}) // validate before saving
   yield* keychain.set(KC_BOT_TOKEN, token)
   yield* ensureBotChatId
-  yield* Console.log(`Bot @${(me as { username?: string }).username} saved to Keychain.`)
+  yield* Console.log(`Bot @${(me as { username?: string }).username} saved to the local secret store.`)
   return token
 })
 
@@ -312,7 +312,7 @@ const logout = Effect.gen(function* () {
     keychain.delete(KC_BOT_TOKEN),
     keychain.delete(KC_CHAT_ID),
   ])
-  yield* Console.log("Logged out. Keychain entries removed.")
+  yield* Console.log("Logged out. Stored secrets removed.")
 })
 
 const [cmd, ...rest] = process.argv.slice(2)

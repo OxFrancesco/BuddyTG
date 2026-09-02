@@ -78,4 +78,7 @@ test("shows transfer and response-bridge options in CLI help", async () => {
   expect(stdout).toContain("ask <question>")
   expect(stdout).toContain("--option <value>=<label>")
   expect(stdout).toContain("hook permission")
+  expect(stdout).toContain("stored in the local secret store")
+  expect(stdout).toContain("Log out and remove all stored secrets")
+  expect(stdout).not.toContain("stored in the Keychain")
 })
