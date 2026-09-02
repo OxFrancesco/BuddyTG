@@ -71,7 +71,8 @@ Usage:
 
 Setup:
   Get your api_id/api_hash from https://my.telegram.org/apps
-  (asked once during login and stored in the local secret store, or set TG_API_ID / TG_API_HASH)`
+  (asked once during login and stored in the local secret store, or set TG_API_ID / TG_API_HASH)
+  Linux uses WebSocket MTProto by default (set BUDDYTG_TRANSPORT=tcp to force TCP)`
 
 const login = (usePhone: boolean) =>
   Effect.gen(function* () {

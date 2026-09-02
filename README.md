@@ -49,6 +49,8 @@ bun run buddytg login
 
 BuddyTG asks for your Telegram API credentials the first time and stores them in the local secret store. For QR login, open Telegram and go to **Settings → Devices → Link Desktop Device**, then scan the code shown in the terminal.
 
+On Linux, MTProto uses Telegram's WebSocket front (`wss://venus.web.telegram.org/apiws` for DC2) with IPv4-only DNS, because direct TCP to the DC is reset during the unencrypted auth-key handshake on some hosts. macOS still uses TCP. Set `BUDDYTG_TRANSPORT=tcp` or `BUDDYTG_TRANSPORT=websocket` to override.
+
 Confirm the active account and send a message to Saved Messages:
 
 ```bash
@@ -309,6 +311,8 @@ Environment variables take precedence over values stored in the local secret sto
 | `TG_BOT_TOKEN` | Bot API token used by `notify`, `ask`, and approval hooks |
 | `TG_BOT_CHAT_ID` | Private Telegram chat/user ID used by bot commands |
 | `BUDDYTG_SECRETS_DIR` | Optional override for the file-backed secret directory |
+| `BUDDYTG_TRANSPORT` | MTProto transport: `websocket` (Linux default) or `tcp` (macOS default) |
+| `BUDDYTG_USE_IPV6` | Set to `1` to use IPv6 DCs / AAAA lookups (default is IPv4-only) |
 
 For example:
 
@@ -356,6 +360,7 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/file-transfer.ts` | File argument parsing, local preflight, validation, and private atomic writes |
 | `src/peer-target.ts` | Safe resolution of IDs, phone numbers, and Telegram links |
 | `src/telegram.ts` | MTProto clients, authentication state, and session persistence |
+| `src/mtproto-transport.ts` | TCP vs WebSocket MTProto selection (Linux defaults to WebSocket) |
 | `src/bot.ts` | Telegram Bot API calls and bot target loading |
 | `src/ask.ts` | Correlated Force Reply/inline-button questions and long polling |
 | `src/permission-hook.ts` | Shared Codex/Claude permission-hook input and decision mapping |
