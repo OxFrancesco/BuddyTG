@@ -9,3 +9,4 @@
 - [x] Open PR
 - [x] Switch Linux MTProto to official WebSocket + IPv4-only (keep macOS TCP)
 - [x] Re-run tests/typecheck and update PR
+- [x] Fix Bun WebSocket constructor: protocols sequence, not options object

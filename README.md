@@ -49,7 +49,7 @@ bun run buddytg login
 
 BuddyTG asks for your Telegram API credentials the first time and stores them in the local secret store. For QR login, open Telegram and go to **Settings → Devices → Link Desktop Device**, then scan the code shown in the terminal.
 
-On Linux, MTProto uses Telegram's WebSocket front (`wss://venus.web.telegram.org/apiws` for DC2) with IPv4-only DNS, because direct TCP to the DC is reset during the unencrypted auth-key handshake on some hosts. macOS still uses TCP. Set `BUDDYTG_TRANSPORT=tcp` or `BUDDYTG_TRANSPORT=websocket` to override.
+On Linux, MTProto uses Telegram's WebSocket front (`wss://venus.web.telegram.org/apiws` for DC2) with `dns.setDefaultResultOrder("ipv4first")`, because direct TCP to the DC is reset during the unencrypted auth-key handshake on some hosts. macOS still uses TCP. Set `BUDDYTG_TRANSPORT=tcp` or `BUDDYTG_TRANSPORT=websocket` to override.
 
 Confirm the active account and send a message to Saved Messages:
 
