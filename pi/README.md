@@ -56,7 +56,13 @@ Active means the last account probe confirmed authentication, not a continuous c
 
 Startup/reload performs one read-only check; additional checks happen only on explicit refresh or after an explicitly approved login/logout. No polling occurs. Account commands and status publishing are TUI-only, not RPC/print/JSON.
 
-All sends require a fresh UI confirmation, including sends to the user's own account. There is no model-controlled approval parameter. Print/JSON mode cannot send. RPC requires a client that responds to pi confirmation dialogs; no response cancels after 60 seconds. The manifest includes the exact numeric recipient, message or file path, byte size and caption. Resolve recipients with the read tools first.
+Message and file sends are auto-approved by default, including Saved Messages. TUI, RPC, print and JSON modes can send without a confirmation dialog when already authenticated. This only removes BuddyTG's send prompt, not recipient validation, file checks or other Pi extensions' permission gates. Resolve recipients with the read tools first. The extension does not maintain a history-based recipient allowlist; the numeric-ID schema and existing CLI recipient checks remain in place.
+
+To restore a fresh UI confirmation for each send, start Pi with `BUDDYTG_CONFIRM_SENDS=1 pi`. `true` and `yes` also enable it; unset, empty, `0`, `false` and `no` disable it. Values are trimmed and case-insensitive. Invalid values fail the send rather than silently approving it. This is a process environment setting, not a model-controlled tool parameter or a Pi settings.json key.
+
+With confirmation enabled, print/JSON sends fail closed. RPC requires a client that responds to Pi confirmation dialogs; denial, cancellation or no response within 60 seconds prevents sending. The manifest includes the exact numeric recipient, message or file path, byte size and caption. Login/logout still require explicit TUI commands and their own confirmations regardless of this setting.
+
+Use `/reload` or restart Pi to load source changes. The environment is read on each send, but exporting a variable in another shell or a Pi bash subprocess cannot change the running Pi process. Restart Pi from the configured shell to change this setting. Load only one distribution.
 
 ## Limits and privacy
 
@@ -68,7 +74,7 @@ This is not a sandbox for pi's other tools. Shell access can still invoke the st
 
 ## Tests
 
-`bun run test` covers the existing CLI plus literal argv handling, bounded capture, withheld stderr, process failure, cancellation/deadlines, approval denial and cancellation, and native pi extension loading. Tests use local subprocesses and simulated confirmation callbacks. They do not send Telegram messages or require credentials. Account tests also cover strict missing-item handling, malformed responses, explicit-action gates and error privacy using mocks. The integration test loads the actual global No-Stop extension through Pi's native loader and uses deferred fake account probes. It checks both startup orders, one-row right alignment, No-Stop on/off coexistence, all badge states, shutdown, reload and stale-result rejection. It defaults to `~/.pi/agent/extensions/nostop/index.ts`; set `NOSTOP_EXTENSION` to test another copy. It is explicitly skipped if that owner is absent.
+`bun run test` covers the existing CLI plus literal argv handling, bounded capture, withheld stderr, process failure, cancellation/deadlines, default no-prompt sends in UI and headless contexts, opt-in approval/denial and cancellation, send schemas and file validation, and native pi extension loading. Tests use local subprocesses and simulated confirmation callbacks. They do not send Telegram messages or require credentials. Account tests also cover strict missing-item handling, malformed responses, explicit-action gates and error privacy using mocks. The integration test loads the actual global No-Stop extension through Pi's native loader and uses deferred fake account probes. It checks both startup orders, one-row right alignment, No-Stop on/off coexistence, all badge states, shutdown, reload and stale-result rejection. It defaults to `~/.pi/agent/extensions/nostop/index.ts`; set `NOSTOP_EXTENSION` to test another copy. It is explicitly skipped if that owner is absent.
 
 Run the owner's regression tests and typecheck separately:
 

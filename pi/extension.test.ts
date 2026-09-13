@@ -1,5 +1,12 @@
-import { describe, expect, test } from "bun:test"
-import { confirmSend } from "./index"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { confirmSend, requiresSendConfirmation } from "./index"
+
+const originalConfirmation = process.env.BUDDYTG_CONFIRM_SENDS
+beforeEach(() => { delete process.env.BUDDYTG_CONFIRM_SENDS })
+afterEach(() => {
+  if (originalConfirmation === undefined) delete process.env.BUDDYTG_CONFIRM_SENDS
+  else process.env.BUDDYTG_CONFIRM_SENDS = originalConfirmation
+})
 import { OUTPUT_LIMIT, runProcess } from "./runner"
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent"
 
@@ -38,7 +45,22 @@ async function approval(hasUI: boolean, confirm: ExtensionContext["ui"]["confirm
   return confirmSend(ctx, 'recipient: 123; message: exact', signal)
 }
 
+describe("send defaults", () => {
+  test("no prompt in UI or headless by default", async () => {
+    for (const hasUI of [true, false]) await approval(hasUI, async () => { throw new Error("must not prompt") })
+  })
+  test("configuration parses explicit opt-in and rejects typos", () => {
+    for (const value of ["", "0", "false", "no"]) expect(requiresSendConfirmation(value)).toBe(false)
+    for (const value of ["1", "true", "yes", " TRUE "]) expect(requiresSendConfirmation(value)).toBe(true)
+    expect(() => requiresSendConfirmation("tru")).toThrow("Nothing sent")
+  })
+  test("pre-abort never auto-approves", async () => {
+    await expect(approval(false, async () => true, AbortSignal.abort())).rejects.toThrow()
+  })
+})
+
 describe("send approval", () => {
+  beforeEach(() => { process.env.BUDDYTG_CONFIRM_SENDS = "1" })
   test("noninteractive denied without prompting", async () => {
     await expect(approval(false, async () => { throw new Error("must not prompt") })).rejects.toThrow("live pi UI")
   })
