@@ -10,20 +10,20 @@ From this repository:
 bun install
 bun run typecheck
 bun run test
-pi -e /Volumes/T6-7/Coding/Personal/BuddyTG/pi/index.ts
+pi -e ./pi/index.ts
 ```
 
 For all projects, after any concurrent settings edits finish:
 
 ```sh
-pi install /Volumes/T6-7/Coding/Personal/BuddyTG
+pi install .
 ```
 
-Then restart pi or use `/reload`. Do not install both the single-file entry and package, or register the extension in another global extension too. No global settings are modified by this implementation. The package explicitly exports no skills, avoiding collisions with separately installed BuddyTG or unslop skills.
+Then restart pi or use `/reload`. Do not install both the single-file entry and package, or register the extension in another global extension too. The plugin itself does not modify global settings. The package explicitly exports no skills, avoiding collisions with separately installed BuddyTG or unslop skills.
 
-Bun must be on Pi's PATH. The package is already installed globally at this local path; use `/reload` or restart Pi to activate changes. No reinstall or settings edit is needed.
+Bun must be on Pi's PATH. The portable `buddytg/` folder in `OxFrancesco/pi-extensions` contains the same plugin and CLI sources. Run `bun install` in that folder before loading it. Load only one copy. If the BuddyTG package is already installed globally, exclude the portable entry with `"-extensions/buddytg/pi/index.ts"` in the global settings `extensions` array.
 
-Use `/buddytg login` in the Pi terminal, approve the dialog, then scan the QR with Francesco's Telegram app. Pi suspends its TUI and gives the existing CLI inherited terminal input/output. API setup and masked 2FA prompts run there, not in chat or tool results. Ctrl+C cancels; Pi restores its TUI in a finally block. The screen is cleared afterward, but external terminal recording/scrollback is outside the plugin's control. Credentials and sessions remain in the existing macOS Keychain. The plugin does not assume that whoever scans is Francesco; it displays the actual account returned by Telegram.
+Use `/buddytg login` in the Pi terminal, approve the dialog, then scan the QR with your Telegram app. Pi suspends its TUI and gives the existing CLI inherited terminal input/output. API setup and masked 2FA prompts run there, not in chat or tool results. Ctrl+C cancels; Pi restores its TUI in a finally block. The screen is cleared afterward, but external terminal recording/scrollback is outside the plugin's control. Credentials and sessions use the CLI secret store: macOS Keychain or the private Linux file backend. The probe uses the same platform transport selection as the CLI. The plugin does not assume that whoever scans is Francesco; it displays the actual account returned by Telegram.
 
 ## Tools and command
 
@@ -50,9 +50,9 @@ The owner and publisher cooperate through `pi.events`, with no imports between t
 - `nostop:row-status-request:v1` requests a replay. No-Stop subscribes and requests on startup; BuddyTG subscribes and publishes on startup. Either startup order works.
 - The owner validates IDs, bounded single-line text without terminal controls, and tones. Status events carry no account names, credentials, actions or authentication authority. Both sides unsubscribe on shutdown; pending account checks are aborted and late results ignored.
 
-This is a local cooperative integration, not a built-in Pi slot. The global No-Stop edits are outside this repository and must accompany it on another machine. Without the patched owner, BuddyTG deliberately creates no fallback row or overlay; `/buddytg status` still works. Reload or restart Pi to load both changes. No global settings were edited.
+This is a local cooperative integration, not a built-in Pi slot. The global No-Stop edits are outside this repository and must accompany it on another machine. Without the patched owner, BuddyTG deliberately creates no fallback row or overlay; `/buddytg status` still works. Reload or restart Pi to load both changes. When both distributions are present, use the scoped exclusion above to prevent duplicate registration.
 
-Active means the last account probe confirmed authentication, not a continuous connection guarantee. Inactive means Keychain explicitly reports no session item. Permission denial, locked Keychain, malformed credentials/session, revoked-session errors, network failures and timeouts remain Error. Checking replaces the previous badge during a probe or approved account operation. `/buddytg status` retains the detailed account identity from the last check.
+Active means the last account probe confirmed authentication, not a continuous connection guarantee. Inactive means the selected secret store explicitly reports no session item. Permission denial, locked Keychain, malformed credentials/session, revoked-session errors, network failures and timeouts remain Error. Checking replaces the previous badge during a probe or approved account operation. `/buddytg status` retains the detailed account identity from the last check.
 
 Startup/reload performs one read-only check; additional checks happen only on explicit refresh or after an explicitly approved login/logout. No polling occurs. Account commands and status publishing are TUI-only, not RPC/print/JSON.
 
