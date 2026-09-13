@@ -1,5 +1,7 @@
 # BuddyTG
 
+BuddyTG also ships a native pi package with typed Telegram tools, UI-confirmed sends, `/buddytg login`, and an account indicator right-aligned beside No-Stop above the input border. See [pi setup and safety limits](pi/README.md).
+
 A small, local-first Telegram CLI for macOS and Linux. Send messages from your personal Telegram account, export Saved Messages, deliver push notifications, and answer coding-agent approval requests through a bot you control.
 
 BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.website) for application logic, and a local secret store for credentials and sessions. It does not write Telegram credentials or session data to project files.

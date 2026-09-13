@@ -10,6 +10,7 @@ folder to gather information, feedback, patterns, and templates before writing c
 - `resources/effect` — Effect TypeScript library — functional effect system, concurrency, streams, schema
 - `resources/mtcute` — mtcute TypeScript MTProto client — peer resolution, dialogs, links, storage
 - `resources/twitterapi-io` — Official TwitterAPI.io API documentation and agent integrations
+- `resources/pi` — Official Pi coding agent source — RPC mode, SDK embedding, sessions, extensions, tools, and terminal UI
 
 <!-- codeview:end -->
 

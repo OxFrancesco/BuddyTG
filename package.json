@@ -5,15 +5,20 @@
   "scripts": {
     "tg": "bun src/cli.ts",
     "buddytg": "bun src/cli.ts",
-    "test": "bun test src/*.test.ts",
+    "test": "bun test src/*.test.ts pi/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "bun build src/cli.ts --compile --outfile dist/buddytg"
   },
   "private": true,
+  "keywords": ["pi-package", "telegram"],
+  "pi": { "extensions": ["./pi/index.ts"], "skills": [], "prompts": [], "themes": [] },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*",
     "typescript": "^5"
   },
   "dependencies": {
