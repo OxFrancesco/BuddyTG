@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>BuddyTG</title>
+    <meta
+      name="description"
+      content="A local CLI that sends Telegram messages and files as you, exports Saved Messages, and sends Codex and Claude Code approval prompts to your phone."
+    />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="https://tg.buddytools.org/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://tg.buddytools.org/" />
+    <meta property="og:title" content="BuddyTG" />
+    <meta
+      property="og:description"
+      content="Send Telegram messages and files as yourself from the terminal, and answer coding-agent approval prompts from your phone."
+    />
+    <meta property="og:image" content="https://tg.buddytools.org/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="topbar">
+      <div class="wrap topbar__inner">
+        <a class="wordmark" href="/">BuddyTG</a>
+        <nav class="nav" aria-label="Sections">
+          <a href="#commands">Commands</a>
+          <a href="#agents">Agents</a>
+          <a href="#safety">Safety</a>
+          <a href="#install">Install</a>
+        </nav>
+        <a class="iconbtn" href="https://github.com/OxFrancesco/BuddyTG" aria-label="BuddyTG on GitHub">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+            />
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="intro" aria-labelledby="name">
+        <div class="wrap intro__grid">
+          <div class="intro__copy">
+            <h1 id="name" class="name reveal">BuddyTG</h1>
+            <p class="lede reveal">
+              Use your own Telegram account from the terminal. Send messages and files, export Saved Messages, and
+              answer Codex and Claude Code approval prompts from your phone.
+            </p>
+            <div class="actions reveal">
+              <a class="btn btn--primary" href="#install">Install</a>
+              <a class="btn btn--outline" href="https://github.com/OxFrancesco/BuddyTG">Source on GitHub</a>
+            </div>
+          </div>
+
+          <div class="demo reveal" data-demo>
+            <div class="demo__tabs" role="tablist" aria-label="Examples">
+              <button class="demo__tab" role="tab" id="tab-send" aria-controls="scene-send" aria-selected="true">Send</button>
+              <button class="demo__tab" role="tab" id="tab-ask" aria-controls="scene-ask" aria-selected="false" tabindex="-1">Ask</button>
+              <button class="demo__tab" role="tab" id="tab-approve" aria-controls="scene-approve" aria-selected="false" tabindex="-1">Approve</button>
+            </div>
+
+            <div class="scene" role="tabpanel" id="scene-send" aria-labelledby="tab-send" data-scene="send">
+              <div class="term">
+                <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">zsh</span></div>
+                <pre class="term__body"><span class="ln" data-type><span class="ps">$</span> buddytg send me "Deploy finished"</span>
+<span class="ln" data-out>Sent (message id 4821).</span></pre>
+              </div>
+              <div class="chat">
+                <div class="chat__head">Saved Messages</div>
+                <div class="chat__body">
+                  <div class="msg msg--out" data-msg>
+                    <p>Deploy finished</p>
+                    <span class="msg__meta">18:42</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="scene" role="tabpanel" id="scene-ask" aria-labelledby="tab-ask" data-scene="ask" hidden>
+              <div class="term">
+                <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">zsh</span></div>
+                <pre class="term__body"><span class="ln" data-type><span class="ps">$</span> buddytg ask --option "main=Use main" \
+    --option "feature=Use feature branch" \
+    "Which branch should I use?"</span>
+<span class="ln ln--dim" data-out>Waiting for a Telegram response…</span>
+<span class="ln" data-out data-after-tap>main</span></pre>
+              </div>
+              <div class="chat">
+                <div class="chat__head">Your BuddyTG bot</div>
+                <div class="chat__body">
+                  <div class="msg" data-msg>
+                    <p>Which branch should I use?</p>
+                    <span class="msg__meta">18:43</span>
+                  </div>
+                  <div class="keys" data-msg>
+                    <span class="key" data-tap>Use main</span>
+                    <span class="key">Use feature branch</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="scene" role="tabpanel" id="scene-approve" aria-labelledby="tab-approve" data-scene="approve" hidden>
+              <div class="term">
+                <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">hook</span></div>
+                <pre class="term__body"><span class="ln ln--dim" data-type># Claude Code runs this for each permission request</span>
+<span class="ln" data-type><span class="ps">$</span> buddytg hook permission &lt; request.json</span>
+<span class="ln ln--dim" data-out>Waiting for a Telegram response…</span>
+<span class="ln" data-out data-after-tap>{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}</span></pre>
+              </div>
+              <div class="chat">
+                <div class="chat__head">Your BuddyTG bot</div>
+                <div class="chat__body">
+                  <div class="msg" data-msg>
+                    <p>🔐 Claude Code approval request</p>
+                    <p>Project: BuddyTG<br />Tool: Bash</p>
+                    <p>Command:<br />bun run build</p>
+                    <p>Allow this action?</p>
+                    <span class="msg__meta">18:44</span>
+                  </div>
+                  <div class="keys" data-msg>
+                    <span class="key" data-tap>Allow once</span>
+                    <span class="key">Deny</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="commands" class="section" aria-labelledby="commands-title">
+        <div class="wrap">
+          <h2 id="commands-title" class="h2">Commands</h2>
+          <div class="cards">
+            <article class="card">
+              <h3>Send a message</h3>
+              <p>To Saved Messages, a username, a phone number, a group ID from <code>chats</code>, or a t.me link.</p>
+              <pre><code>buddytg send @username "Hello"</code></pre>
+            </article>
+            <article class="card">
+              <h3>Send a file</h3>
+              <p>Shows the resolved recipient and the file manifest, then waits for you to type the recipient's ID.</p>
+              <pre><code>buddytg file send @username archive.zip</code></pre>
+            </article>
+            <article class="card">
+              <h3>Download a file</h3>
+              <p>From a copied message link or a peer and message ID. An existing file is never replaced.</p>
+              <pre><code>buddytg file download https://t.me/group/456 --to ~/Downloads</code></pre>
+            </article>
+            <article class="card">
+              <h3>List chats</h3>
+              <p>Names and the numeric IDs you pass to <code>send</code>. Negative IDs are groups and channels.</p>
+              <pre><code>buddytg chats --limit 200 --archived</code></pre>
+            </article>
+            <article class="card">
+              <h3>Export Saved Messages</h3>
+              <p>Markdown, oldest first, with timestamps, message IDs, tags, forwards and reply links.</p>
+              <pre><code>buddytg bookmarks notes/telegram.md --download-media</code></pre>
+            </article>
+            <article class="card">
+              <h3>Notify yourself</h3>
+              <p>A normal push notification from your own bot. HTML and MarkdownV2 formatting work.</p>
+              <pre><code>buddytg notify --silent "Build finished"</code></pre>
+            </article>
+            <article class="card">
+              <h3>Ask and wait</h3>
+              <p>Sends a question with optional buttons and prints the answer to stdout for a script to read.</p>
+              <pre><code>buddytg ask --option "yes=Ship it" "Deploy now?"</code></pre>
+            </article>
+            <article class="card">
+              <h3>Log in</h3>
+              <p>Scan a QR code from Settings, Devices, Link Desktop Device. Use <code>--phone</code> for a code instead.</p>
+              <pre><code>buddytg login</code></pre>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="agents" class="section" aria-labelledby="agents-title">
+        <div class="wrap">
+          <h2 id="agents-title" class="h2">Agents</h2>
+          <div class="split">
+            <div class="split__text">
+              <h3 class="h3">Approval prompts on your phone</h3>
+              <p>
+                Add one <code>PermissionRequest</code> hook to Codex or Claude Code. Each request arrives in Telegram with
+                Allow once and Deny buttons. A tap allows one action and never creates a standing rule.
+              </p>
+              <p>
+                If Telegram is not set up, unreachable, or the request times out, the hook returns no decision and the agent
+                shows its own local dialog.
+              </p>
+            </div>
+            <figure class="code">
+              <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">json</span></div>
+              <pre><code>{
+  <span class="k">"hooks"</span>: {
+    <span class="k">"PermissionRequest"</span>: [
+      {
+        <span class="k">"hooks"</span>: [
+          {
+            <span class="k">"type"</span>: <span class="s">"command"</span>,
+            <span class="k">"command"</span>: <span class="s">"buddytg hook permission"</span>,
+            <span class="k">"timeout"</span>: <span class="n">600</span>
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+              <figcaption class="sr-only">Hook entry for .codex/hooks.json or .claude/settings.json</figcaption>
+            </figure>
+          </div>
+
+          <div class="split">
+            <div class="split__text">
+              <h3 class="h3">pi extension</h3>
+              <p>
+                Typed tools for pi: whoami, chats, send and send file. <code>/buddytg login</code> runs the QR login inside
+                the pi terminal. Recipients must be numeric chat IDs.
+              </p>
+              <p>
+                Sends run without a confirmation dialog by default. Start pi with <code>BUDDYTG_CONFIRM_SENDS=1</code> to
+                approve each one.
+              </p>
+            </div>
+            <figure class="code">
+              <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">zsh</span></div>
+              <pre><code><span class="c"># one session</span>
+pi -e ./pi/index.ts
+
+<span class="c"># every project</span>
+pi install .
+
+<span class="c"># confirm every send</span>
+BUDDYTG_CONFIRM_SENDS=1 pi</code></pre>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="safety" class="section" aria-labelledby="safety-title">
+        <div class="wrap">
+          <h2 id="safety-title" class="h2">Safety</h2>
+          <dl class="facts">
+            <div>
+              <dt>Secrets</dt>
+              <dd>
+                API credentials, the Telegram session and the bot token go in the macOS Keychain. On Linux they are files in
+                <code>~/.config/buddytg/secrets</code>, a <code>0700</code> directory with <code>0600</code> files. Nothing is
+                written to the repository, and secrets never appear in a process's arguments.
+              </dd>
+            </div>
+            <div>
+              <dt>File sends</dt>
+              <dd>
+                You type the recipient's numeric ID before an upload starts. There is no <code>--yes</code> flag.
+                Directories, empty files, URLs and symlinks are refused, and a file that changes after the manifest is not
+                sent.
+              </dd>
+            </div>
+            <div>
+              <dt>Downloads</dt>
+              <dd>
+                Remote names are sanitized and an existing file is never replaced. Data streams into a hidden
+                <code>0600</code> temporary file and is published only when complete.
+              </dd>
+            </div>
+            <div>
+              <dt>Approvals</dt>
+              <dd>
+                The prompt shows the full command, not the agent's summary of it. Only a tap or reply on that exact prompt,
+                from your own private chat, counts, and a request too long to show in full is left to your computer.
+              </dd>
+            </div>
+            <div>
+              <dt>Other folders</dt>
+              <dd>
+                The built <code>buddytg</code> ignores <code>.env</code> and <code>bunfig.toml</code> in the folder it runs
+                from, so a cloned repository cannot redirect your approvals or run code through it.
+              </dd>
+            </div>
+            <div>
+              <dt>Logout</dt>
+              <dd><code>buddytg logout</code> revokes the Telegram session and deletes every stored secret.</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section id="install" class="section" aria-labelledby="install-title">
+        <div class="wrap">
+          <h2 id="install-title" class="h2">Install</h2>
+          <div class="split">
+            <div class="split__text">
+              <p>You need macOS or Linux, <a href="https://bun.sh">Bun</a>, a Telegram account, and an
+                <code>api_id</code> and <code>api_hash</code> from
+                <a href="https://my.telegram.org/apps">my.telegram.org/apps</a>.</p>
+              <p>
+                The first <code>login</code> asks for those two values and stores them. Notifications, questions and
+                approvals also need your own bot. Create one with <a href="https://t.me/BotFather">@BotFather</a>, send it
+                <code>/start</code>, then run <code>bun run buddytg bot login</code>.
+              </p>
+            </div>
+            <ol class="steps">
+              <li>
+                <figure class="code">
+                  <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">clone</span><button class="copy" type="button" data-copy="git clone https://github.com/OxFrancesco/BuddyTG.git &amp;&amp; cd BuddyTG &amp;&amp; bun install">Copy</button></div>
+                  <pre><code>git clone https://github.com/OxFrancesco/BuddyTG.git
+cd BuddyTG &amp;&amp; bun install</code></pre>
+                </figure>
+              </li>
+              <li>
+                <figure class="code">
+                  <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">log in</span><button class="copy" type="button" data-copy="bun run buddytg login">Copy</button></div>
+                  <pre><code>bun run buddytg login
+bun run buddytg send me "Hello from BuddyTG"</code></pre>
+                </figure>
+              </li>
+              <li>
+                <figure class="code">
+                  <div class="chrome"><b class="dots" aria-hidden="true"><i></i><i></i><i></i></b><span aria-hidden="true">binary</span><button class="copy" type="button" data-copy="bun run build">Copy</button></div>
+                  <pre><code>bun run build
+<span class="c"># then put dist/buddytg on your PATH</span></code></pre>
+                </figure>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer__inner">
+        <a href="https://github.com/OxFrancesco/BuddyTG">github.com/OxFrancesco/BuddyTG</a>
+        <span>Not affiliated with Telegram.</span>
+        <a href="https://oddofrancesco.com">Francesco Oddo</a>
+      </div>
+    </footer>
+  </body>
+</html>

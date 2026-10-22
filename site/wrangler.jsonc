@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buddytg-site",
+  "account_id": "157a8b025a13404b16f11ad7078e53f1",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "routes": [
+    { "pattern": "tg.buddytools.org", "custom_domain": true },
+    { "pattern": "tg.buddytools.org/*", "zone_name": "buddytools.org" }
+  ],
+  "workers_dev": false,
+  "preview_urls": false
+}

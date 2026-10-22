@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      html, body { width: 1200px; height: 630px; overflow: hidden; }
+      .og { position: relative; width: 1200px; height: 630px; padding: 72px 80px; isolation: isolate; border: 0; }
+      .og::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(circle, color-mix(in oklab, var(--coral) 90%, transparent) 1.2px, transparent 1.8px); background-size: 24px 24px; -webkit-mask-image: radial-gradient(ellipse 60% 70% at 85% 30%, #000, transparent 75%); mask-image: radial-gradient(ellipse 60% 70% at 85% 30%, #000, transparent 75%); opacity: .6; }
+      .og h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 196px; line-height: .86; letter-spacing: -.025em; text-transform: uppercase; }
+      .og p { max-width: 30ch; margin: 40px 0 0; font-size: 30px; line-height: 1.45; }
+      .og .rule { width: 96px; height: 6px; margin-top: 44px; background: var(--coral); }
+      .og .url { position: absolute; right: 80px; bottom: 64px; font-size: 22px; letter-spacing: .12em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <div class="og">
+      <h1>BuddyTG</h1>
+      <div class="rule"></div>
+      <p>Use your own Telegram account from the terminal and from coding agents.</p>
+      <span class="url">tg.buddytools.org</span>
+    </div>
+  </body>
+</html>

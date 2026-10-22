@@ -26,5 +26,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "exclude": ["node_modules", "resources"]
+  "exclude": ["node_modules", "resources", "site"]
 }

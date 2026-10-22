@@ -1,0 +1,15 @@
+{
+  "name": "buddytg-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot ./dev.ts",
+    "build": "rm -rf dist && bun build ./index.html --outdir dist --minify --loader .woff2:file --loader .woff:file && cp -R public/. dist/",
+    "deploy": "bun run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@fontsource/chakra-petch": "^5",
+    "@fontsource/ibm-plex-mono": "^5",
+    "wrangler": "^4"
+  }
+}
