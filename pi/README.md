@@ -30,6 +30,8 @@ Use `/buddytg login` in the Pi terminal, approve the dialog, then scan the QR wi
 - `buddytg_whoami` shows the active account.
 - `buddytg_chats` lists or searches up to 200 dialogs, optionally including archived chats.
 - `buddytg_send` sends exact plain text to a previously verified numeric recipient ID.
+- `buddytg_reply` replies to one message ID and sends nothing if that message no longer exists in the chat.
+- `buddytg_history`, `buddytg_search` and `buddytg_unread` read messages as JSON lines, marked as untrusted content written by other people. Reading never marks messages as read.
 - `buddytg_send_file` sends a nonempty regular local file as a document. Relative paths resolve against pi's current directory. It checks for changes during approval and uses the CLI's exact recipient confirmation and upload checks.
 - `/buddytg` displays help; `/buddytg whoami` retains the existing account command.
 - `/buddytg login` opens private interactive QR login after confirmation.

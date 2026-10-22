@@ -27,7 +27,7 @@ export class McpConfigError extends Schema.TaggedError<McpConfigError>()("McpCon
 /** stdio: the host spawns this process, so the OS user is the authorization boundary. */
 export const runStdio = Effect.fn("runStdio")(function* (run?: CliRunner) {
   yield* Effect.acquireRelease(
-    Effect.sync(() => serveStdio(() => buildServer(run, { localFiles: true }))),
+    Effect.sync(() => serveStdio(() => buildServer(run, { localFiles: true, readMessages: true }))),
     (handle) => boundedCleanup(() => handle.close()),
   )
   yield* Console.error("BuddyTG MCP server on stdio")
@@ -46,6 +46,8 @@ export interface HttpOptions {
   readonly port: number
   /** Public base URL when behind a tunnel or proxy. */
   readonly url?: string
+  /** Expose history, search and unread. Off unless `--allow-read` is passed. */
+  readonly allowRead?: boolean
 }
 
 const MIN_SECRET_BYTES = 32
@@ -147,7 +149,7 @@ export interface HttpConfig extends HttpOptions {
 export const createHttpApp = (config: HttpConfig, run?: CliRunner) => {
   const resource = new URL("/mcp", config.baseUrl)
   const auth = createAuthServer({ ...config, resource })
-  const mcp = createMcpHandler(() => buildServer(run, { localFiles: false }), { responseMode: "sse" })
+  const mcp = createMcpHandler(() => buildServer(run, { localFiles: false, readMessages: config.allowRead === true }), { responseMode: "sse" })
   const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(resource)
   const gate = requireBearerAuth({
     verifier: { verifyAccessToken: auth.verifyAccessToken },
@@ -205,6 +207,9 @@ export const runHttp = Effect.fn("runHttp")(function* (options: HttpOptions, run
   )
   yield* Console.error(`BuddyTG MCP server: ${app.resource.href} (listening on ${server.hostname}:${server.port})`)
   yield* Console.error(`Login Widget Allowed URLs in @BotFather: ${config.baseUrl.origin} and ${app.endpoints.telegramCallback}`)
+  if (config.allowRead) {
+    yield* Console.error("--allow-read: signed-in clients can read your message history, search all chats and list unread chats.")
+  }
   if (!config.telegram) {
     yield* Console.error("Log in with Telegram is not set up yet: run `buddytg mcp setup`, then restart. Sign-ins are refused until then.")
   }

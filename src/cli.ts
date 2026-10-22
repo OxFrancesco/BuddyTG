@@ -18,6 +18,7 @@ import {
 import { collectChatRows, parseChatsArgs, type ChatsOptions } from "./chats"
 import { downloadFileCommand, sendFileCommand } from "./file-commands"
 import { escapeTerminalText, parseFileCommand } from "./file-transfer"
+import { history, parseHistoryArgs, parseReplyArgs, parseSearchArgs, parseUnreadArgs, reply, search, unread } from "./messages"
 import { Keychain } from "./keychain"
 import { KC_LOGIN_CLIENT_ID, KC_LOGIN_CLIENT_SECRET, KC_MCP_SECRET, runHttp, runStdio } from "./mcp/serve"
 import { resolveSendTarget } from "./peer-target"
@@ -52,6 +53,17 @@ Usage:
   buddytg login --phone          Log in with phone number + code instead
   buddytg send <peer> <message>  Send a message ("me", @username, phone number,
                                  chat/group ID from \`buddytg chats\`, or t.me link)
+  buddytg reply <peer> <message-id> <message>
+                                 Reply to one message (fails if it no longer exists)
+  buddytg history <peer>         Print recent messages as JSON lines, oldest first
+     --limit <n>            Messages to read (default: 20; max: 100)
+     --before <message-id>  Only messages older than this one, for paging
+  buddytg search <query>         Search messages in all chats, as JSON lines
+     --chat <peer>          Search one chat only
+     --limit <n>            Max results (default: 20; max: 50)
+  buddytg unread                 List chats with unread messages among the 500 most recent, as JSON lines
+     --limit <n>            Max chats (default: 20; max: 100)
+     --skip-archived        Leave out archived chats
   buddytg file send <peer> <path>  Send one local file after exact recipient confirmation
      --caption <text>        Add a caption
      --as <document|photo>   Preserve exact bytes (default), or send a validated native photo
@@ -83,6 +95,7 @@ Usage:
   buddytg mcp http               Run it over Streamable HTTP with Log in with Telegram
      --port <n>               Listen port (default: 8790)
      --host <addr>            Listen address (default: 127.0.0.1)
+     --allow-read             Also expose history, search and unread (off by default over HTTP)
      --url <origin>           Public origin behind a tunnel, e.g. https://buddytg.example.com
   buddytg mcp setup              Store the Login Widget client secret from @BotFather
   buddytg mcp revoke             Rotate the MCP signing secret, revoking every client and token
@@ -346,9 +359,13 @@ const mcpRevoke = Effect.gen(function* () {
 })
 
 const parseHttpOptions = (tokens: ReadonlyArray<string>) => {
-  const options: { host: string; port: number; url?: string } = { host: "127.0.0.1", port: 8790 }
+  const options: { host: string; port: number; url?: string; allowRead: boolean } = { host: "127.0.0.1", port: 8790, allowRead: false }
   for (let index = 0; index < tokens.length; index += 1) {
     const flag = tokens[index]
+    if (flag === "--allow-read") {
+      options.allowRead = true
+      continue
+    }
     const value = tokens[index + 1]
     index += 1
     if (value === undefined || value.startsWith("--")) throw new Error(`${flag} requires a value`)
@@ -403,6 +420,14 @@ const command = (): Effect.Effect<unknown, unknown, Keychain> => {
     case "send":
       if (rest.length >= 2) return send(rest[0]!, rest.slice(1).join(" "))
       break
+    case "reply":
+      return parseArgs(() => parseReplyArgs(rest)).pipe(Effect.flatMap(reply))
+    case "history":
+      return parseArgs(() => parseHistoryArgs(rest)).pipe(Effect.flatMap(history))
+    case "search":
+      return parseArgs(() => parseSearchArgs(rest)).pipe(Effect.flatMap(search))
+    case "unread":
+      return parseArgs(() => parseUnreadArgs(rest)).pipe(Effect.flatMap(unread))
     case "file":
       return parseArgs(() => parseFileCommand(rest)).pipe(
         Effect.flatMap((fileCommand) =>

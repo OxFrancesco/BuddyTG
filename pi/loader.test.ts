@@ -7,6 +7,6 @@ test("native pi loader registers tools and command without Telegram access", asy
   expect(loaded.errors).toEqual([])
   expect(loaded.extensions).toHaveLength(1)
   const extension = loaded.extensions[0]
-  expect([...extension!.tools.keys()].sort()).toEqual(["buddytg_chats", "buddytg_send", "buddytg_send_file", "buddytg_whoami"])
+  expect([...extension!.tools.keys()].sort()).toEqual(["buddytg_chats", "buddytg_history", "buddytg_reply", "buddytg_search", "buddytg_send", "buddytg_send_file", "buddytg_unread", "buddytg_whoami"])
   expect(extension!.commands.has("buddytg")).toBe(true)
 })

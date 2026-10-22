@@ -12,6 +12,7 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 - Send one explicitly confirmed local file as an exact document or validated native photo
 - Download one Telegram attachment to a private local file without overwriting
 - List your chats, groups, and channels with the IDs needed to message them
+- Read a chat's recent messages, search messages, list unread chats, and reply to a specific message
 - Sign in with a QR code or phone number
 - Export Saved Messages to Markdown, preserving rich text, tags, forwards, and reply links
 - Optionally download media alongside an export
@@ -167,6 +168,34 @@ bun run buddytg chats --limit 200 --archived
 
 Use the printed ID as the `<peer>` argument for `send`. Negative IDs identify groups and channels.
 
+### Read, search and reply
+
+```bash
+# The last 20 messages of a chat, oldest first; page back with --before
+bun run buddytg history -1001234567890
+bun run buddytg history -1001234567890 --limit 50 --before 4120
+
+# Search every chat, or one chat
+bun run buddytg search "invoice"
+bun run buddytg search "invoice" --chat -1001234567890
+
+# Chats with unread messages, among your 500 most recent dialogs, archived ones included
+bun run buddytg unread
+bun run buddytg unread --skip-archived
+
+# Reply to message 4120 in that chat
+bun run buddytg reply -1001234567890 4120 "On it"
+```
+
+`history`, `search` and `unread` print a header line, then one JSON object per message or chat.
+Names and text are written by other people, so JSON quoting keeps a crafted message on its own line,
+and invisible or direction-changing characters are printed as `\u` escapes. Reading never marks
+messages as read. Text from content-protected chats is left out, and messages longer than 2,000
+characters are cut, with `truncatedFrom` giving the full length.
+
+`reply` checks that the message exists in that chat first. Telegram would otherwise post a reply to
+a missing ID as an ordinary message.
+
 ### Export Saved Messages
 
 ```bash
@@ -315,6 +344,10 @@ does one thing and exits, so nothing carries over between requests.
 | `buddytg_whoami` | Shows the logged-in account |
 | `buddytg_chats` | Lists or searches dialogs and their numeric IDs |
 | `buddytg_send` | Sends text to a numeric ID |
+| `buddytg_reply` | Replies to one message ID; sends nothing if that message is gone |
+| `buddytg_history` | Reads a chat's recent messages, oldest first (stdio, or HTTP with `--allow-read`) |
+| `buddytg_search` | Searches all chats or one chat (stdio, or HTTP with `--allow-read`) |
+| `buddytg_unread` | Lists chats with unread messages (stdio, or HTTP with `--allow-read`) |
 | `buddytg_send_file` | Uploads one local file as a document after you approve it in Telegram (stdio only) |
 | `buddytg_notify` | Pushes a notification through your bot |
 | `buddytg_ask` | Asks through your bot and waits for the reply |
@@ -367,6 +400,18 @@ HTTP server binds `127.0.0.1` and validates `Host` and `Origin`. It does not exp
 `buddytg_send_file`, because a remote caller could then upload any file your user can read. Over
 stdio, every upload waits for your **Send file** tap in Telegram (the message names the resolved
 recipient and the file), and paths inside BuddyTG's secret store are refused.
+
+Over HTTP the reading tools are off unless you start the server with `buddytg mcp http --allow-read`.
+With them on, anyone holding a valid access token can read and search every chat on the account.
+Every reading tool, and the server instructions, tell the model that names and message text are
+untrusted data. That makes prompt injection harder, but a model can still be talked into acting on a
+message, so keep sends confirmed in your client.
+
+Live end-to-end test against your own account, which posts messages to the chats you list:
+
+```bash
+BUDDYTG_LIVE_CHATS=-1001234567890,-4612345678 bun test src/mcp/live.e2e.test.ts
+```
 
 ### Inspect or remove the session
 
@@ -450,6 +495,7 @@ Keep command behavior and examples in this README aligned with the usage text in
 | --- | --- |
 | `src/cli.ts` | Top-level command dispatch and the existing account/message commands |
 | `src/chats.ts` | Chat-list argument parsing, filtering, and display rows |
+| `src/messages.ts` | History, search, unread and reply commands, with untrusted JSON-line output |
 | `src/file-commands.ts` | Confirmed Telegram upload/download orchestration and progress reporting |
 | `src/file-transfer.ts` | File argument parsing, local preflight, validation, and private atomic writes |
 | `src/peer-target.ts` | Safe resolution of IDs, phone numbers, and Telegram links |
@@ -468,6 +514,7 @@ The Telegram client uses in-memory storage. After authenticated operations, its 
 - Treat `api_hash`, bot tokens, and exported Telegram sessions as secrets.
 - BuddyTG stores secrets in the macOS Keychain or a private `0700` user directory unless an environment variable overrides them.
 - Message contents still pass through Telegram's user or bot APIs as required by the selected command.
+- `history`, `search` and `unread` hand other people's messages to whatever reads the output. Over MCP HTTP they need `--allow-read`.
 - Approval hooks send the project name, tool name, and the full command or tool input to your configured private Telegram chat.
 - Telegram replies are accepted only from the configured chat and when correlated to the active prompt; use a dedicated bot and protect its token.
 - Markdown exports and downloaded media contain your Telegram data; choose their destination and permissions accordingly.

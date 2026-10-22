@@ -217,7 +217,7 @@ test("the owner logs in with Telegram, then lists and calls tools over 2026-07-2
   const second = connect(provider)
   await second.open()
   const { tools } = await second.client.listTools()
-  expect(tools.map((t) => t.name)).toEqual(["buddytg_whoami", "buddytg_chats", "buddytg_send", "buddytg_notify", "buddytg_ask"])
+  expect(tools.map((t) => t.name)).toEqual(["buddytg_whoami", "buddytg_chats", "buddytg_send", "buddytg_reply", "buddytg_notify", "buddytg_ask"])
 
   const whoami = await second.client.callTool({ name: "buddytg_whoami", arguments: {} })
   expect(whoami.content).toEqual([{ type: "text", text: `Francesco Oddo (@Francesco_Oddo, id ${OWNER})` }])
@@ -225,6 +225,44 @@ test("the owner logs in with Telegram, then lists and calls tools over 2026-07-2
   expect(sent.isError).toBeFalsy()
   expect(cliCalls.at(-1)).toEqual(["send", OWNER, "--not a flag"])
   await second.client.close()
+})
+
+test("message history, search and unread are only exposed with --allow-read", async () => {
+  const signIn = async () => {
+    const { provider, store } = memoryProvider()
+    const first = connect(provider)
+    await expect(first.open()).rejects.toBeInstanceOf(UnauthorizedError)
+    const { callback } = await browse(store.authUrl!)
+    await first.transport.finishAuth(callback!.searchParams)
+    const second = connect(provider)
+    await second.open()
+    return second.client
+  }
+  const closed = await signIn()
+  const names = (await closed.listTools()).tools.map((t) => t.name)
+  expect(names).not.toContain("buddytg_history")
+  await expect(closed.callTool({ name: "buddytg_history", arguments: { chatId: OWNER } })).rejects.toThrow("not found")
+  expect(cliCalls.some((argv) => argv[0] === "history")).toBe(false)
+  await closed.close()
+
+  const previous = app
+  app = createHttpApp({ ...config, allowRead: true }, fakeCli)
+  try {
+    const open = await signIn()
+    expect((await open.listTools()).tools.map((t) => t.name)).toEqual([
+      "buddytg_whoami", "buddytg_chats", "buddytg_send", "buddytg_reply", "buddytg_history", "buddytg_search", "buddytg_unread", "buddytg_notify", "buddytg_ask",
+    ])
+    await open.callTool({ name: "buddytg_history", arguments: { chatId: "-1001234", limit: 5, beforeMessageId: 99 } })
+    expect(cliCalls.at(-1)).toEqual(["history", "-1001234", "--limit", "5", "--before", "99"])
+    const before = cliCalls.length
+    const flag = await open.callTool({ name: "buddytg_search", arguments: { query: "--chat" } })
+    expect(flag.isError).toBe(true)
+    expect(cliCalls).toHaveLength(before)
+    await open.close()
+  } finally {
+    await app.close()
+    app = previous
+  }
 })
 
 test("codes and refresh tokens work once; refresh rotates", async () => {
