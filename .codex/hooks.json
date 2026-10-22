@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun \"$(git rev-parse --show-toplevel)/src/cli.ts\" hook permission",
+            "command": "bun --cwd \"$(git rev-parse --show-toplevel)\" --no-env-file src/cli.ts hook permission",
             "timeout": 600,
             "statusMessage": "Waiting for Telegram approval"
           }
