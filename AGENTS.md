@@ -7,10 +7,10 @@ The `resources/` folder contains read-only clones of reference codebases.
 If you need to implement code specific to one of these codebases, read the relevant
 folder to gather information, feedback, patterns, and templates before writing code.
 
-- `resources/effect` — Effect TypeScript library — functional effect system, concurrency, streams, schema
+- `resources/pi` — Official Pi coding agent source — RPC mode, SDK embedding, sessions, extensions, tools, and terminal UI
+- `resources/effect` — Official Effect TypeScript monorepo — typed effects, concurrency, CLI, platform, and AI packages
 - `resources/mtcute` — mtcute TypeScript MTProto client — peer resolution, dialogs, links, storage
 - `resources/twitterapi-io` — Official TwitterAPI.io API documentation and agent integrations
-- `resources/pi` — Official Pi coding agent source — RPC mode, SDK embedding, sessions, extensions, tools, and terminal UI
 
 <!-- codeview:end -->
 
