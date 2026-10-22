@@ -20,7 +20,7 @@ export async function readSecret(account: string) {
     if (!secret.trim()) throw new Error("Empty secret item")
     return secret
   }
-  const child = Bun.spawn(["security", "find-generic-password", "-s", "buddytg", "-a", account, "-w"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
+  const child = Bun.spawn(["/usr/bin/security", "find-generic-password", "-s", "buddytg", "-a", account, "-w"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" })
   const [output, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
   return keychainValue(code, output)
 }

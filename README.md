@@ -1,6 +1,6 @@
 # BuddyTG
 
-BuddyTG also ships a native pi package with typed Telegram tools, UI-confirmed sends, `/buddytg login`, and an account indicator right-aligned beside No-Stop above the input border. See [pi setup and safety limits](pi/README.md).
+BuddyTG also ships a native pi package with typed Telegram tools (sends are auto-approved unless `BUDDYTG_CONFIRM_SENDS=1`), `/buddytg login`, and an account indicator right-aligned beside No-Stop above the input border. See [pi setup and safety limits](pi/README.md).
 
 A small, local-first Telegram CLI for macOS and Linux. Send messages from your personal Telegram account, export Saved Messages, deliver push notifications, and answer coding-agent approval requests through a bot you control.
 
@@ -18,6 +18,7 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 - Send Telegram push notifications through your own bot, with HTML, MarkdownV2, and silent delivery support
 - Ask a correlated free-text or multiple-choice question and wait for the Telegram response
 - Route Codex and Claude Code permission requests to Telegram approval buttons
+- Run as a stateless MCP server (protocol 2026-07-28), locally over stdio or remotely behind Log in with Telegram
 - Keep API credentials, user sessions, bot tokens, and chat IDs in a local secret store (macOS Keychain, or a private user directory on Linux)
 
 ## Requirements
@@ -38,7 +39,9 @@ BuddyTG never writes credentials or session data into the git working tree, comm
 
   The directory is created with mode `0700` and each secret file with `0600`.
 
-Set `BUDDYTG_SECRETS_DIR` to an absolute path to use a different file-backed directory (this also selects the file backend on macOS). Do not point it at a repository. Environment variables still override stored values.
+Set `BUDDYTG_SECRETS_DIR` to an absolute path to use a different file-backed directory (this also selects the file backend on macOS). Do not point it at a repository. The file store refuses secret files and directories that belong to another user or that group or others can write. Environment variables still override stored values.
+
+On macOS, secrets are written to the Keychain through `security -i` on stdin, so they never appear in a process argument list.
 
 ## Quick start
 
@@ -112,6 +115,10 @@ resolved manifest and exits without uploading. Re-run with the ID it printed:
 ```bash
 bun run buddytg file send @username archive.zip --confirm-to 123456789
 ```
+
+`--confirm-telegram` asks for the approval in Telegram instead: your bot sends the resolved recipient
+and the file details with **Send file** and **Don't send** buttons. The MCP `buddytg_send_file` tool
+always uses it.
 
 `--confirm-to` must equal the resolved recipient ID. There is intentionally no generic `--yes`
 or recursive/directory upload. Regular accounts are preflighted against mtcute's 2000 MiB limit;
@@ -240,7 +247,8 @@ This repository already contains project-local hook configurations for
 - `.codex/hooks.json`
 - `.claude/settings.json`
 
-They call `bun <repo>/src/cli.ts hook permission`, wait for your Telegram button tap,
+They run `bun --no-env-file src/cli.ts hook permission` from this repository's root
+(Claude Code via `$CLAUDE_PROJECT_DIR`, Codex via `git rev-parse --show-toplevel`), wait for your Telegram button tap,
 and emit the shared `PermissionRequest` allow/deny JSON response. If Telegram is not
 configured, unavailable, or times out, the hook exits without a decision and the agent
 falls back to its normal local permission dialog.
@@ -260,7 +268,13 @@ Then:
 3. Review and trust the project-local `PermissionRequest` hook.
 4. Trigger an action that needs approval and tap **Allow once** or **Deny** in Telegram.
 
-For another repository, first install the standalone `buddytg` executable on `PATH`.
+The Telegram message shows the full command (or the full tool input), every other argument such as
+`dangerouslyDisableSandbox`, and the agent's own description only as a labeled extra. Invisible and
+direction-changing characters are shown as `\u{…}`. A request too long for one Telegram message is
+never truncated: BuddyTG sends a notice without buttons and leaves the decision to the local dialog.
+
+For another repository, first install the standalone `buddytg` executable on `PATH` (built with
+`bun run build`, see below).
 Then add the following handler under `hooks.PermissionRequest` in either
 `.codex/hooks.json` or `.claude/settings.json`:
 
@@ -287,6 +301,73 @@ definition to be reviewed. Claude Code also exposes project hooks through `/hook
 The adapter intentionally offers only one-time allow or deny decisions; it does not
 create persistent allow rules.
 
+### Run as an MCP server
+
+`buddytg mcp` is a stateless MCP server for protocol revision `2026-07-28`. It is built on the
+official v2 TypeScript SDK. Clients on `2025-11-25` and older are still served, statelessly, so
+current Claude Code and Claude Desktop builds work today.
+
+Every tool call starts a fresh CLI process. That process reads the session from the secret store,
+does one thing and exits, so nothing carries over between requests.
+
+| Tool | Does |
+| --- | --- |
+| `buddytg_whoami` | Shows the logged-in account |
+| `buddytg_chats` | Lists or searches dialogs and their numeric IDs |
+| `buddytg_send` | Sends text to a numeric ID |
+| `buddytg_send_file` | Uploads one local file as a document after you approve it in Telegram (stdio only) |
+| `buddytg_notify` | Pushes a notification through your bot |
+| `buddytg_ask` | Asks through your bot and waits for the reply |
+
+**Local, over stdio.** The client launches the process, so access is limited to your OS user:
+
+```bash
+claude mcp add buddytg -- buddytg mcp
+# from a source checkout:
+claude mcp add buddytg -- bun --cwd /path/to/BuddyTG --no-env-file src/cli.ts mcp
+```
+
+**Remote, over Streamable HTTP with Log in with Telegram.** Run this behind a stable HTTPS hostname,
+for example a Cloudflare named tunnel pointing at `127.0.0.1:8790`:
+
+```bash
+buddytg mcp http --url https://buddytg.example.com
+```
+
+1. In [@BotFather](https://t.me/BotFather), open your bot, then **Bot Settings → Login Widget**. Add
+   both URLs the server prints to **Allowed URLs**: the origin, and `/oauth/telegram/callback`.
+2. Run `buddytg mcp setup` and paste the **Client ID** and **Client Secret** shown there.
+3. Add `https://buddytg.example.com/mcp` as a connector in Claude, or run
+   `claude mcp add --transport http buddytg https://buddytg.example.com/mcp`.
+
+The server is also its own OAuth 2.1 authorization server. Claude registers through Client ID
+Metadata Documents or dynamic registration, then opens a consent page that names the client and
+where it will return. That page hands off to Telegram's OpenID Connect login (`oauth.telegram.org`,
+PKCE, RS256/ES256 `id_token`). Only the Telegram account that owns the BuddyTG session can finish:
+the ID stored by `buddytg notify`, or the comma-separated `BUDDYTG_MCP_ALLOWED_IDS`. Anyone else
+gets a refusal page after Telegram login.
+
+The authorization server keeps no session store either. Client registrations, the in-flight
+Telegram login, authorization codes and tokens are JWTs. They are signed, or encrypted where they
+carry a PKCE verifier, with keys derived from one secret. Access tokens last an hour and are bound
+to the `/mcp` resource. Refresh tokens rotate on every use, and a sign-in lasts at most 30 days no
+matter how often it is refreshed. `buddytg mcp revoke` replaces the stored secret, which signs every
+client out. If `BUDDYTG_MCP_SECRET` comes from the environment, revoke refuses: rotate it where it is
+defined. An environment secret must be at least 32 random bytes in base64url.
+
+The consent page is a same-origin form. Approving it sets a short-lived cookie, and the Telegram
+callback only completes in the browser that approved, so a Telegram login link sent by someone else
+cannot grant access. Client ID Metadata Documents are fetched only from public addresses, with a
+16 KiB cap.
+
+Settings are read from the environment first, so `doppler run -- buddytg mcp http` works. The
+variables are `BUDDYTG_MCP_URL`, `BUDDYTG_MCP_SECRET`, `TG_LOGIN_CLIENT_ID`,
+`TG_LOGIN_CLIENT_SECRET` and `BUDDYTG_MCP_ALLOWED_IDS`. Without them, the secret store is used. The
+HTTP server binds `127.0.0.1` and validates `Host` and `Origin`. It does not expose
+`buddytg_send_file`, because a remote caller could then upload any file your user can read. Over
+stdio, every upload waits for your **Send file** tap in Telegram (the message names the resolved
+recipient and the file), and paths inside BuddyTG's secret store are refused.
+
 ### Inspect or remove the session
 
 ```bash
@@ -294,7 +375,10 @@ bun run buddytg whoami
 bun run buddytg logout
 ```
 
-`logout` attempts to revoke the Telegram session and removes BuddyTG's API credentials, user session, bot token, and chat ID from the local secret store.
+`logout` attempts to revoke the Telegram session and removes BuddyTG's API credentials, user session, bot token, and chat ID from the local secret store. It lists any of these still set in the environment.
+
+Logging in as a different Telegram account removes the stored bot chat ID and MCP secret, because both
+belong to the previous account. Run `buddytg notify "Ready"` again afterwards.
 
 Run the CLI without arguments to see its built-in help:
 
@@ -324,6 +408,11 @@ TG_API_ID=123456 TG_API_HASH=your_api_hash bun run buddytg login
 
 Avoid committing credentials to shell scripts, `.env` files, or the repository.
 
+Bun normally loads `.env` and `bunfig.toml` (including `preload` scripts) from the directory it runs
+in. BuddyTG's own launchers avoid that: the built executable disables both, and the pi extension, MCP
+tools and hooks start Bun in the BuddyTG directory with `--no-env-file`. If you run
+`bun src/cli.ts` yourself inside another repository, that repository's `.env` and `bunfig.toml` apply.
+
 ## Build a standalone executable
 
 ```bash
@@ -331,7 +420,10 @@ bun run build
 ./dist/buddytg whoami
 ```
 
-To invoke it from anywhere, copy `dist/buddytg` into a directory already on your `PATH`.
+To invoke it from anywhere, copy `dist/buddytg` into a directory already on your `PATH`. The build
+passes `--no-compile-autoload-dotenv --no-compile-autoload-bunfig`, so the executable ignores `.env`
+and `bunfig.toml` in whatever directory it runs from. Rebuild and reinstall any copy built before
+this change.
 
 ## Development
 
@@ -376,7 +468,7 @@ The Telegram client uses in-memory storage. After authenticated operations, its 
 - Treat `api_hash`, bot tokens, and exported Telegram sessions as secrets.
 - BuddyTG stores secrets in the macOS Keychain or a private `0700` user directory unless an environment variable overrides them.
 - Message contents still pass through Telegram's user or bot APIs as required by the selected command.
-- Approval hooks send the project name, tool name, and approval description or input preview to your configured private Telegram chat.
+- Approval hooks send the project name, tool name, and the full command or tool input to your configured private Telegram chat.
 - Telegram replies are accepted only from the configured chat and when correlated to the active prompt; use a dedicated bot and protect its token.
 - Markdown exports and downloaded media contain your Telegram data; choose their destination and permissions accordingly.
 - File uploads never accept a URL or directory and do not begin before the exact resolved recipient ID is confirmed.

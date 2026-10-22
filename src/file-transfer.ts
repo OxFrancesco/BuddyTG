@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { constants } from "node:fs"
-import { link, lstat, open, realpath, stat, unlink, type FileHandle } from "node:fs/promises"
+import { link, lstat, mkdir, open, realpath, rename, stat, unlink, type FileHandle } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
 import { Readable } from "node:stream"
 
@@ -11,6 +11,8 @@ export type FileSendCommand = {
   readonly caption?: string
   readonly mediaType: "document" | "photo"
   readonly confirmTo?: number
+  /** Ask the owner in Telegram (via the BuddyTG bot) instead of at the terminal. */
+  readonly confirmTelegram?: boolean
 }
 
 export type FileDownloadCommand = {
@@ -93,7 +95,8 @@ export const openLocalUpload = async (
 
   let handle: FileHandle | undefined
   try {
-    handle = await open(inputPath, constants.O_RDONLY | constants.O_NOFOLLOW)
+    // O_NONBLOCK: a FIFO must not block the open before the regular-file check.
+    handle = await open(inputPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
     const stats = await handle.stat()
     if (!stats.isFile()) throw new Error("Refusing local path: expected one regular file")
     if (stats.size === 0) throw new Error("Refusing local file: empty files are not supported")
@@ -318,6 +321,46 @@ export const prepareDownloadTarget = async (destinationDirectory: string, fileNa
   return target
 }
 
+/**
+ * Write a whole file at mode 0600 and atomically replace `target`. The data goes to
+ * an O_EXCL|O_NOFOLLOW temporary file first, and rename() replaces the directory
+ * entry, so a symlink planted at `target` is replaced, never followed.
+ */
+export const writePrivateFile = async (target: string, data: string | Uint8Array) => {
+  const temporary = join(dirname(target), `.buddytg-${randomUUID()}.part`)
+  const output = await open(
+    temporary,
+    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
+    0o600,
+  )
+  try {
+    await output.chmod(0o600)
+    await output.writeFile(data)
+    await output.sync()
+    await output.close()
+    await rename(temporary, target)
+  } catch (error) {
+    await output.close().catch(() => {})
+    await unlink(temporary).catch(() => {})
+    throw error
+  }
+}
+
+/** Create (or reuse) a private 0700 directory that is not a symlink. */
+export const ensurePrivateDirectory = async (directory: string) => {
+  await mkdir(directory, { mode: 0o700 }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+  })
+  const stats = await lstat(directory)
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new Error(`Refusing media directory: ${directory} is not a plain directory`)
+  }
+  const uid = process.getuid?.()
+  if ((uid !== undefined && stats.uid !== uid) || (stats.mode & 0o022) !== 0) {
+    throw new Error(`Refusing media directory: ${directory} belongs to another user or is writable by others`)
+  }
+}
+
 export const writePrivateDownload = async (options: {
   readonly chunks: AsyncIterable<Uint8Array>
   readonly target: string
@@ -431,6 +474,7 @@ const parseSendCommand = (args: readonly string[]): FileSendCommand => {
   let caption: string | undefined
   let mediaType: "document" | "photo" = "document"
   let confirmTo: number | undefined
+  let confirmTelegram = false
 
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index]!
@@ -467,6 +511,12 @@ const parseSendCommand = (args: readonly string[]): FileSendCommand => {
         index += 1
         break
       }
+      case "--confirm-telegram": {
+        if (seenOptions.has(arg)) throw new Error(`${arg} may only be provided once`)
+        seenOptions.add(arg)
+        confirmTelegram = true
+        break
+      }
       default:
         throw new Error(`Unknown file send option: ${arg}`)
     }
@@ -474,6 +524,9 @@ const parseSendCommand = (args: readonly string[]): FileSendCommand => {
 
   if (positionals.length !== 2) {
     throw new Error("Usage: buddytg file send <peer> <path> [options]")
+  }
+  if (confirmTelegram && confirmTo !== undefined) {
+    throw new Error("Use either --confirm-to or --confirm-telegram, not both")
   }
 
   return {
@@ -483,6 +536,7 @@ const parseSendCommand = (args: readonly string[]): FileSendCommand => {
     ...(caption === undefined ? {} : { caption }),
     mediaType,
     ...(confirmTo === undefined ? {} : { confirmTo }),
+    ...(confirmTelegram ? { confirmTelegram } : {}),
   }
 }
 

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent"
-import { runProcess } from "./runner"
+import { bunArgv, childEnv, PACKAGE_ROOT, runProcess } from "./runner"
 import { createAccountPublisher } from "./row-status"
 
 export type AccountState = { kind: "checking" } | { kind: "signed-in"; account: string } | { kind: "signed-out" } | { kind: "error" }
@@ -28,8 +28,11 @@ export type AccountDependencies = {
   interactive: (action: "login" | "logout") => number | null
 }
 const dependencies: AccountDependencies = {
-  check: async signal => parseAccount(await runProcess(["bun", fileURLToPath(new URL("./account-probe.ts", import.meta.url))], signal, 20_000)),
-  interactive: action => spawnSync("bun", [fileURLToPath(new URL("../src/cli.ts", import.meta.url)), action], { stdio: "inherit", shell: false }).status,
+  check: async signal => parseAccount(await runProcess(bunArgv(fileURLToPath(new URL("./account-probe.ts", import.meta.url))), signal, 20_000)),
+  interactive: action => {
+    const [bun, ...args] = bunArgv(fileURLToPath(new URL("../src/cli.ts", import.meta.url)), action)
+    return spawnSync(bun!, args, { cwd: PACKAGE_ROOT, env: childEnv(), stdio: "inherit", shell: false }).status
+  },
 }
 
 export function registerAccount(pi: Pick<ExtensionAPI, "on" | "events">, deps: AccountDependencies = dependencies) {
@@ -68,7 +71,7 @@ export function registerAccount(pi: Pick<ExtensionAPI, "on" | "events">, deps: A
       if (action === "refresh") { await refresh(); return true }
       if (action !== "login" && action !== "logout") return true
       const message = action === "login"
-        ? "Open private terminal QR login? Scan using Francesco's Telegram account. Never paste credentials into Pi chat. Ctrl+C cancels."
+        ? "Open private terminal QR login? Scan it with your Telegram app. Never paste credentials into Pi chat. Ctrl+C cancels."
         : "Log out of BuddyTG and delete its session, API credentials and bot secrets from Keychain? This affects the standalone CLI too."
       if (!await ctx.ui.confirm(`BuddyTG ${action}`, message)) return true
       controller?.abort(); controller = undefined

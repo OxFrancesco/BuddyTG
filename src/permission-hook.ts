@@ -1,11 +1,25 @@
-export interface PermissionHookInput {
-  readonly session_id: string
-  readonly cwd: string
-  readonly hook_event_name: "PermissionRequest"
-  readonly tool_name: string
-  readonly tool_input: unknown
-  readonly model?: string
-}
+import { Predicate, Schema } from "effect"
+
+/** Telegram allows 4096 characters per message; keep a margin. */
+export const MAX_PERMISSION_QUESTION_LENGTH = 4_000
+
+const required = (field: string) => <S extends Schema.Top>(self: S) =>
+  Schema.annotateKey<S>({ messageMissingKey: `Permission hook input is missing ${field}` })(self)
+const NonBlank = Schema.String.check(Schema.isPattern(/\S/, { message: "must not be blank" }))
+
+// Struct order is the order errors are reported in: the event name comes first.
+export const PermissionHookInput = Schema.Struct({
+  hook_event_name: Schema.Literal("PermissionRequest").pipe(required("hook_event_name")),
+  session_id: NonBlank.pipe(required("session_id")),
+  cwd: NonBlank.pipe(required("cwd")),
+  tool_name: NonBlank.pipe(required("tool_name")),
+  tool_input: Schema.optional(Schema.Unknown),
+  model: Schema.optional(Schema.Unknown),
+})
+export type PermissionHookInput = typeof PermissionHookInput.Type
+
+export const parsePermissionHookInput = Schema.decodeUnknownSync(PermissionHookInput)
+export const decodePermissionHookInput = Schema.decodeUnknownEffect(Schema.fromJsonString(PermissionHookInput))
 
 export interface PermissionHookDecision {
   readonly hookSpecificOutput: {
@@ -16,49 +30,50 @@ export interface PermissionHookDecision {
   }
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+/**
+ * Make every invisible, blank-looking or direction-changing code point visible, so
+ * the text the owner reads is the text that runs. Line feeds and plain spaces stay;
+ * everything else becomes \u{…}. Long blank runs, which can push a payload out of
+ * view, become a visible count.
+ */
+export const revealText = (value: string) =>
+  value
+    .replace(
+      /(?![\n ])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}\u115f\u1160\u2800\u3164\uffa0]/gu,
+      (c) => `\\u{${c.codePointAt(0)!.toString(16)}}`,
+    )
+    .replace(/\n{3,}/g, (run) => `\n⟨${run.length - 1} blank lines⟩\n`)
+    .replace(/ {16,}/g, (run) => `⟨${run.length} spaces⟩`)
 
-const requiredString = (record: Record<string, unknown>, field: string) => {
-  const value = record[field]
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Permission hook input is missing ${field}`)
-  }
-  return value
-}
+/** One-line variant for names and paths: line feeds are shown as \n too. */
+export const revealLine = (value: string) => revealText(value).replace(/\n/g, "\\n")
 
-export const parsePermissionHookInput = (value: unknown): PermissionHookInput => {
-  if (!isRecord(value)) throw new Error("Permission hook input must be a JSON object")
-  const hookEventName = requiredString(value, "hook_event_name")
-  if (hookEventName !== "PermissionRequest") {
-    throw new Error(`Unsupported hook event: ${hookEventName}`)
-  }
-  return {
-    session_id: requiredString(value, "session_id"),
-    cwd: requiredString(value, "cwd"),
-    hook_event_name: hookEventName,
-    tool_name: requiredString(value, "tool_name"),
-    tool_input: value.tool_input,
-    ...(typeof value.model === "string" && value.model ? { model: value.model } : {}),
-  }
-}
-
-const cleanText = (value: string) =>
-  value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").trim()
-
-const inputSummary = (toolInput: unknown) => {
-  if (isRecord(toolInput)) {
-    const description = toolInput.description
-    if (typeof description === "string" && description.trim()) return cleanText(description)
-    const command = toolInput.command
-    if (typeof command === "string" && command.trim()) return cleanText(command)
-  }
+const json = (value: unknown) => {
   try {
-    const serialized = JSON.stringify(toolInput)
-    return serialized ? cleanText(serialized) : "No additional details"
+    return JSON.stringify(value, null, 2) ?? "undefined"
   } catch {
-    return "No additional details"
+    return "(input could not be serialized)"
   }
+}
+
+/**
+ * The full action, never a summary: for shell tools the exact command plus every
+ * other argument; for anything else the whole input. A model-written description
+ * is shown only as a labeled extra, because the model also writes the command.
+ */
+const describeToolInput = (toolInput: unknown) => {
+  if (Predicate.isObject(toolInput) && Predicate.isString(toolInput.command)) {
+    const { command, description, ...others } = toolInput
+    // Only a string description is shown as one; anything else stays with the other input.
+    const rest = Predicate.isString(description) || description === undefined ? others : { ...others, description }
+    const lines = ["Command:", revealText(command) || "(empty)"]
+    if (Object.keys(rest).length > 0) lines.push("", `Other input: ${revealText(json(rest))}`)
+    if (Predicate.isString(description) && description.trim()) {
+      lines.push("", `Agent's description (unverified): ${revealLine(description)}`)
+    }
+    return lines.join("\n")
+  }
+  return `Input:\n${revealText(json(toolInput))}`
 }
 
 const basename = (path: string) => {
@@ -66,21 +81,27 @@ const basename = (path: string) => {
   return normalized.slice(normalized.lastIndexOf("/") + 1) || normalized
 }
 
-export const formatPermissionQuestion = (input: PermissionHookInput) => {
-  const agent = input.model ? "Codex" : "Claude Code"
-  const details = inputSummary(input.tool_input)
-  const question = [
-    `🔐 ${agent} approval request`,
+const agentName = (input: PermissionHookInput) => (input.model ? "Codex" : "Claude Code")
+
+const header = (input: PermissionHookInput) => [
+  `🔐 ${agentName(input)} approval request`,
+  "",
+  `Project: ${revealLine(basename(input.cwd))}`,
+  `Tool: ${revealLine(input.tool_name)}`,
+]
+
+/** The complete approval text. It is never truncated; check its length before sending. */
+export const formatPermissionQuestion = (input: PermissionHookInput) =>
+  [...header(input), "", describeToolInput(input.tool_input), "", "Allow this action?"].join("\n")
+
+/** Sent without buttons when the full request does not fit in one Telegram message. */
+export const formatTooLongNotice = (input: PermissionHookInput, length: number) =>
+  [
+    ...header(input),
     "",
-    `Project: ${basename(input.cwd)}`,
-    `Tool: ${cleanText(input.tool_name)}`,
-    "",
-    details.slice(0, 2_800),
-    "",
-    "Allow this action?",
+    `This request is ${length} characters, too long to show in full here.`,
+    "Answer it on your computer.",
   ].join("\n")
-  return question.slice(0, 4_000)
-}
 
 export const permissionDecisionFor = (
   answer: string,
