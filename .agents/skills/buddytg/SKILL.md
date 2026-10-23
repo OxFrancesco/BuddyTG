@@ -85,6 +85,8 @@ Add `--download-media` only when the user wants attachments downloaded beside th
 await runBuddyTG("bookmarks", outputPath, "--download-media")
 ```
 
+The export refuses to overwrite an existing file; pick a new output path instead.
+
 Expect the export to be ordered oldest first and to retain timestamps, message IDs, rich text, tags, forwards, and reply links where Telegram exposes them. Afterward, report the destination and exported count printed by the CLI. Do not reproduce private bookmark contents unless the task requires analyzing them.
 
 ## Resolve chats

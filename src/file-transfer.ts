@@ -322,13 +322,19 @@ export const prepareDownloadTarget = async (destinationDirectory: string, fileNa
 }
 
 /**
- * Write a whole file at mode 0600 and atomically replace `target`. The data goes to
- * an O_EXCL|O_NOFOLLOW temporary file first, and rename() replaces the directory
- * entry, so a symlink planted at `target` is replaced, never followed.
+ * Write a new private 0600 file without replacing or following an existing entry,
+ * including symlinks.
  */
 export const writePrivateFile = async (target: string, data: string | Uint8Array) => {
+  try {
+    await lstat(target)
+    throw new Error(`Refusing to overwrite existing file: ${target}`)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+  }
+
   const temporary = join(dirname(target), `.buddytg-${randomUUID()}.part`)
-  const output = await open(
+  let output: FileHandle | undefined = await open(
     temporary,
     constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
     0o600,
@@ -338,11 +344,21 @@ export const writePrivateFile = async (target: string, data: string | Uint8Array
     await output.writeFile(data)
     await output.sync()
     await output.close()
-    await rename(temporary, target)
+    output = undefined
+
+    try {
+      await link(temporary, target)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(`Refusing to overwrite existing file: ${target}`)
+      }
+      throw error
+    }
   } catch (error) {
-    await output.close().catch(() => {})
-    await unlink(temporary).catch(() => {})
+    await output?.close().catch(() => {})
     throw error
+  } finally {
+    await unlink(temporary).catch(() => {})
   }
 }
 

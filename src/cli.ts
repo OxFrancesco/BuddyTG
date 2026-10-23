@@ -79,7 +79,7 @@ Usage:
   buddytg chats [query]          List your chats/groups/channels with their IDs
      --limit <n>            Max matching dialogs to list (default: 50)
      --archived             Include archived chats
-  buddytg bookmarks [file]       Export all Saved Messages to a markdown file (default: saved-messages.md)
+  buddytg bookmarks [file]       Export all Saved Messages to a new markdown file (default: saved-messages.md)
      --download-media       Also download media files next to the export
   buddytg bot login              Set up your notification bot (token from @BotFather)
   buddytg notify <message>       Notify yourself via your own bot (real push notification)
