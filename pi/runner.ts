@@ -66,5 +66,5 @@ export async function runProcess(argv: string[], signal?: AbortSignal, timeoutMs
   })
 }
 
-export type RunCLI = (args: string[], signal?: AbortSignal) => Promise<string>
-export const runCLI: RunCLI = (args, signal) => runProcess(bunArgv(cli, ...args), signal)
+export type RunCLI = (args: string[], signal?: AbortSignal, timeoutMs?: number) => Promise<string>
+export const runCLI: RunCLI = (args, signal, timeoutMs = 60_000) => runProcess(bunArgv(cli, ...args), signal, timeoutMs)

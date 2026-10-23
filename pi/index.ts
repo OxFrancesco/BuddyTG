@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 import { lstat } from "node:fs/promises"
 import { runCLI, type RunCLI } from "./runner"
 import { registerAccount } from "./account"
+import { assertNotSecret } from "../src/secret-path"
 
 const id = Type.String({ pattern: "^-?[1-9][0-9]*$", maxLength: 16, description: "Exact Telegram ID verified with buddytg_chats or buddytg_whoami" })
 const text = Type.String({ minLength: 1, maxLength: 4096 })
@@ -85,18 +86,22 @@ export function registerBuddyTG(pi: Pick<ExtensionAPI, "registerTool" | "registe
     },
   })
   pi.registerTool({
-    name: "buddytg_send_file", label: "BuddyTG send file", description: "Upload one local regular file as an exact-byte document to a verified numeric Telegram ID. Auto-approved by default; BUDDYTG_CONFIRM_SENDS=1 confirms path, size, recipient and caption. CLI verifies recipient before upload. Output capped at 24 KiB.",
+    name: "buddytg_send_file", label: "BuddyTG send file", description: "Upload one local regular file as an exact-byte document to a verified numeric Telegram ID. The user approves each upload in Telegram before any bytes are sent. BuddyTG's secret store is refused. BUDDYTG_CONFIRM_SENDS=1 additionally confirms path, size, recipient and caption in the pi UI. CLI verifies recipient before upload. Output capped at 24 KiB.",
     parameters: Type.Object({ recipientId: id, path: Type.String({ minLength: 1, maxLength: 4096 }), caption: Type.Optional(Type.String({ maxLength: 1024 })) }),
     async execute(_id, p, signal, _update, ctx) {
       signal?.throwIfAborted()
       const path = resolve(ctx.cwd, p.path.replace(/^@/, ""))
       const before = await lstat(path)
       if (!before.isFile() || before.size === 0) throw new Error("Choose a nonempty regular file, not a symlink.")
-      await confirmSend(ctx, JSON.stringify({ recipientId: p.recipientId, path, bytes: before.size, mode: "document", caption: p.caption ?? "" }, null, 2), signal)
+      const real = await assertNotSecret(path)
+      await confirmSend(ctx, JSON.stringify({ recipientId: p.recipientId, path: real, bytes: before.size, mode: "document", caption: p.caption ?? "" }, null, 2), signal)
       const after = await lstat(path)
       if (!after.isFile() || before.ino !== after.ino || before.dev !== after.dev || before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error("File changed during confirmation; nothing uploaded.")
       signal?.throwIfAborted()
-      return result(await run(["file", "send", p.recipientId, path, "--confirm-to", p.recipientId, ...(p.caption === undefined ? [] : ["--caption", p.caption])], signal))
+      // `--confirm-to` stands for the user's own confirmation, so it never comes from the model.
+      // The owner approves each upload in Telegram.
+      const argv = ["file", "send", p.recipientId, real, "--confirm-telegram", ...(p.caption === undefined ? [] : ["--caption", p.caption])]
+      return result(await run(argv, signal, 15 * 60_000))
     },
   })
   pi.registerCommand("buddytg", {
@@ -109,7 +114,7 @@ export function registerBuddyTG(pi: Pick<ExtensionAPI, "registerTool" | "registe
         catch { ctx.ui.notify("BuddyTG account check failed. Run bun run buddytg whoami in the BuddyTG directory.", "error") }
         return
       }
-      ctx.ui.notify("BuddyTG tools: buddytg_whoami, buddytg_chats, buddytg_history, buddytg_search, buddytg_unread, buddytg_send, buddytg_reply, buddytg_send_file. Sends are auto-approved by default, including headless modes; BUDDYTG_CONFIRM_SENDS=1 restores UI confirmation. /buddytg login opens private QR login; logout requires confirmation; refresh checks the account; status shows the last check. Exports, downloads and bot setup remain in the standalone CLI.", "info")
+      ctx.ui.notify("BuddyTG tools: buddytg_whoami, buddytg_chats, buddytg_history, buddytg_search, buddytg_unread, buddytg_send, buddytg_reply, buddytg_send_file. Message sends are auto-approved by default, including headless modes. File uploads always need approval in Telegram before bytes are sent, and BuddyTG's secret store is refused. BUDDYTG_CONFIRM_SENDS=1 additionally confirms sends in the pi UI. /buddytg login opens private QR login; logout requires confirmation; refresh checks the account; status shows the last check. Exports, downloads and bot setup remain in the standalone CLI.", "info")
     },
   })
 }
