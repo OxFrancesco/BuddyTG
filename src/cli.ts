@@ -95,6 +95,7 @@ Usage:
   buddytg mcp http               Run it over Streamable HTTP with Log in with Telegram
      --port <n>               Listen port (default: 8790)
      --host <addr>            Listen address (default: 127.0.0.1)
+     --allow-plaintext        Allow a non-loopback --host without TLS (tokens cross the network in cleartext)
      --allow-read             Also expose history, search and unread (off by default over HTTP)
      --url <origin>           Public origin behind a tunnel, e.g. https://buddytg.example.com
   buddytg mcp setup              Store the Login Widget client secret from @BotFather
@@ -359,11 +360,20 @@ const mcpRevoke = Effect.gen(function* () {
 })
 
 const parseHttpOptions = (tokens: ReadonlyArray<string>) => {
-  const options: { host: string; port: number; url?: string; allowRead: boolean } = { host: "127.0.0.1", port: 8790, allowRead: false }
+  const options: { host: string; port: number; url?: string; allowRead: boolean; allowPlaintext: boolean } = {
+    host: "127.0.0.1",
+    port: 8790,
+    allowRead: false,
+    allowPlaintext: false,
+  }
   for (let index = 0; index < tokens.length; index += 1) {
     const flag = tokens[index]
     if (flag === "--allow-read") {
       options.allowRead = true
+      continue
+    }
+    if (flag === "--allow-plaintext") {
+      options.allowPlaintext = true
       continue
     }
     const value = tokens[index + 1]
