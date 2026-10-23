@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, beforeEach, expect, setDefaultTimeout, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Client } from "@modelcontextprotocol/client"
@@ -19,6 +19,8 @@ const CLI = join(ROOT, "src/cli.ts")
 const OWNER_ID = 4242
 const OWNER_TOKEN = "111111:OWNER-DUMMY-TOKEN"
 const ATTACKER_TOKEN = "999999:ATTACKER-DUMMY-TOKEN"
+/** A bot whose updates another consumer, outside this machine, is already polling. */
+const POLLED_TOKEN = "222222:POLLED-ELSEWHERE-TOKEN"
 
 interface Call {
   readonly token: string
@@ -41,6 +43,17 @@ const bot = Bun.serve({
     const [, token, method] = match as unknown as [string, string, string]
     const body = (await request.json().catch(() => ({}))) as Record<string, any>
     calls.push({ token, method, body })
+    if (token === POLLED_TOKEN) {
+      if (method === "getUpdates") {
+        return Response.json({
+          ok: false,
+          error_code: 409,
+          description: "Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+        }, { status: 409 })
+      }
+      if (method === "getWebhookInfo") return Response.json({ ok: true, result: { url: "" } })
+      return Response.json({ ok: true, result: true })
+    }
     if (token !== OWNER_TOKEN) {
       return Response.json({ ok: false, error_code: 401, description: "Unauthorized" }, { status: 401 })
     }
@@ -211,6 +224,52 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
     expect(calls.some((call) => call.method === "editMessageReplyMarkup")).toBe(true)
   })
 }
+
+test("a second ask for the same bot fails fast instead of competing for its updates", async () => {
+  const first = spawnCli(["ask", "--timeout", "20", "First?"])
+  for (let i = 0; i < 200 && !calls.some((call) => call.method === "sendMessage"); i += 1) await Bun.sleep(50)
+  expect(calls.filter((call) => call.method === "sendMessage")).toHaveLength(1)
+
+  const second = await finish(spawnCli(["ask", "--timeout", "5", "Second?"]))
+  expect(second.exitCode).toBe(1)
+  expect(second.stderr).toMatch(/Error: Another buddytg process \(pid \d+\) is running: it is already waiting for a Telegram answer from this bot\./)
+  expect(second.stdout + second.stderr).not.toContain(OWNER_TOKEN)
+  expect(calls.filter((call) => call.method === "sendMessage")).toHaveLength(1)
+
+  first.kill("SIGINT")
+  expect((await finish(first)).exitCode).toBe(130)
+  expect((await readdir(secrets)).filter((name) => name.endsWith(".lock"))).toEqual([])
+})
+
+test("commands refuse the Telegram session while another process holds it, and logout keeps the secrets", async () => {
+  const other = Bun.spawn(["sleep", "30"])
+  await writeFile(join(secrets, "session.lock"), `${other.pid}\n`, { mode: 0o600 })
+  await writeSecret("api-id", "12345")
+  await writeSecret("api-hash", "0123456789abcdef0123456789abcdef")
+  await writeSecret("session", "DUMMY-SESSION")
+  try {
+    for (const args of [["whoami"], ["send", "me", "hi"], ["logout"]]) {
+      const result = await finish(spawnCli(args))
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toBe(
+        `Error: Another buddytg process (pid ${other.pid}) is running: it is using the Telegram session. Wait for it to finish and try again.\n`,
+      )
+    }
+    expect(existsSync(join(secrets, "session"))).toBe(true)
+    expect(existsSync(join(secrets, "bot-token"))).toBe(true)
+    expect(existsSync(join(secrets, "session.lock"))).toBe(true)
+  } finally {
+    other.kill()
+    await Promise.all(["session.lock", "api-id", "api-hash", "session"].map((name) => rm(join(secrets, name), { force: true })))
+  }
+})
+
+test("a getUpdates conflict from Telegram is reported, not retried", async () => {
+  const result = await finish(spawnCli(["ask", "--timeout", "5", "Ready?"], { env: env({ TG_BOT_TOKEN: POLLED_TOKEN }) }))
+  expect(result.exitCode).toBe(1)
+  expect(result.stderr).toContain("Error: Another process is reading this bot's updates (Telegram getUpdates conflict).")
+  expect(result.stdout + result.stderr).not.toContain(POLLED_TOKEN)
+})
 
 test("Bot API failures never print the bot token", async () => {
   await writeSecret("bot-token", ATTACKER_TOKEN)

@@ -265,7 +265,10 @@ hook or another program.
 `ask` uses Telegram Bot API [`getUpdates`](https://core.telegram.org/bots/api#getupdates)
 long polling. Telegram does not permit long polling while that bot has an outgoing
 webhook configured, and a bot should have only one active update consumer. Use a
-dedicated BuddyTG bot and do not run concurrent `ask` commands for the same token.
+dedicated BuddyTG bot. A second `ask` (or `hook permission`, or `file send
+--confirm-telegram`) for the same token fails at once with "Another buddytg
+process … is running" instead of competing for updates, and a Telegram
+getUpdates conflict from a consumer elsewhere is reported the same way.
 
 ### Answer Codex and Claude Code approvals from Telegram
 
@@ -505,9 +508,12 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/ask.ts` | Correlated Force Reply/inline-button questions and long polling |
 | `src/permission-hook.ts` | Shared Codex/Claude permission-hook input and decision mapping |
 | `src/keychain.ts` | Effect secret-store service (macOS Keychain or a private user directory) |
+| `src/lock.ts` | Single-instance lockfiles for the Telegram session and each bot's update stream |
 | `src/prompt.ts` | Interactive and secret terminal prompts |
 
 The Telegram client uses in-memory storage. After authenticated operations, its exported session is persisted in the local secret store rather than in a session file inside the project.
+
+One process at a time uses the Telegram session. Every command that opens it, and the pi account check, holds `session.lock` in the secrets directory (`BUDDYTG_SECRETS_DIR`, `$XDG_CONFIG_HOME/buddytg/secrets` or `~/.config/buddytg/secrets`, also on macOS). A second process fails at once with "Another buddytg process (pid …) is running". A lock left by a process that no longer runs is taken over.
 
 ## Security notes
 

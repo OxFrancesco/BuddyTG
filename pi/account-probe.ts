@@ -2,6 +2,7 @@ import { TelegramClient } from "@mtcute/bun"
 import { MemoryStorage } from "@mtcute/core"
 import { Effect, Redacted } from "effect"
 import { defaultSecretsDirectory, makeFileKeychain, usesMacOSKeychain } from "../src/keychain"
+import { acquireInstanceLock, SESSION_BUSY, SESSION_LOCK } from "../src/lock"
 import { createMtprotoTransport, selectMtprotoTransport } from "../src/mtproto-transport"
 
 /** Only item-not-found means absent. Locked/denied/broken Keychain is an error. */
@@ -31,13 +32,16 @@ export async function probeAccount() {
   const apiId = process.env.TG_API_ID ?? await readSecret("api-id")
   const apiHash = process.env.TG_API_HASH ?? await readSecret("api-hash")
   if (!apiId || !apiHash || !Number.isSafeInteger(Number(apiId)) || Number(apiId) <= 0) throw new Error("Invalid API configuration")
-  const selection = selectMtprotoTransport()
-  const client = new TelegramClient({ apiId: Number(apiId), apiHash, storage: new MemoryStorage(), transport: createMtprotoTransport(selection), useIpv6: selection.useIpv6 })
+  const release = await acquireInstanceLock(SESSION_LOCK, SESSION_BUSY)
   try {
-    await client.importSession(session)
-    const me = await client.getMe()
-    return { kind: "signed-in", account: `${me.displayName}${me.username ? ` @${me.username}` : ""} (${me.id})` }
-  } finally { await client.destroy() }
+    const selection = selectMtprotoTransport()
+    const client = new TelegramClient({ apiId: Number(apiId), apiHash, storage: new MemoryStorage(), transport: createMtprotoTransport(selection), useIpv6: selection.useIpv6 })
+    try {
+      await client.importSession(session)
+      const me = await client.getMe()
+      return { kind: "signed-in", account: `${me.displayName}${me.username ? ` @${me.username}` : ""} (${me.id})` }
+    } finally { await client.destroy() }
+  } finally { await release() }
 }
 
 // Bun-only subprocess. Never import the Telegram client into Pi's Node runtime.
