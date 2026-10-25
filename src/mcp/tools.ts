@@ -1,11 +1,11 @@
-import { lstat, realpath } from "node:fs/promises"
+import { lstat } from "node:fs/promises"
 import { homedir } from "node:os"
-import { isAbsolute, relative } from "node:path"
+import { isAbsolute } from "node:path"
 import { fileURLToPath } from "node:url"
 import { McpServer, type CallToolResult, type ToolAnnotations } from "@modelcontextprotocol/server"
 import * as z from "zod/v4"
 import { bunArgv, PACKAGE_ROOT, runProcess } from "../../pi/runner"
-import { defaultSecretsDirectory } from "../keychain"
+import { assertNotSecret } from "../secret-path"
 
 /** Runs one CLI invocation and returns its sanitized stdout. */
 export type CliRunner = (argv: string[], signal: AbortSignal, timeoutMs: number) => Promise<string>
@@ -62,19 +62,6 @@ export interface ServerOptions {
    * HTTP only with `--allow-read`, since a leaked token would expose every chat.
    */
   readonly readMessages: boolean
-}
-
-const isInside = (root: string, path: string) => {
-  const rel = relative(root, path)
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
-}
-
-/** Refuse BuddyTG's own secret store, whatever the model asks for. */
-const assertNotSecret = async (path: string) => {
-  const real = await realpath(path)
-  const secrets = await realpath(defaultSecretsDirectory()).catch(() => defaultSecretsDirectory())
-  if (isInside(secrets, real)) throw new Error("path is inside the BuddyTG secret store.")
-  return real
 }
 
 export const buildServer = (run: CliRunner = cliRunner, options: ServerOptions = { localFiles: false, readMessages: false }) => {

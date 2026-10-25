@@ -17,7 +17,9 @@
  * completes in the browser that saw (and approved) the consent page.
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto"
+import type { LookupAddress, LookupAllOptions, LookupOneOptions } from "node:dns"
 import { lookup } from "node:dns/promises"
+import { request as httpsRequest } from "node:https"
 import { isIP } from "node:net"
 import {
   createRemoteJWKSet,
@@ -116,55 +118,119 @@ class ReplayCache {
   }
 }
 
+const ipv6Hextets = (address: string): number[] => {
+  let text = address.toLowerCase().split("%")[0]!
+  const v4 = text.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
+  if (v4) {
+    const [a, b, c, d] = v4.slice(1).map(Number) as [number, number, number, number]
+    text = `${text.slice(0, v4.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
+  }
+  const [head = "", tail] = text.split("::")
+  const left = head ? head.split(":") : []
+  const right = tail ? tail.split(":") : []
+  const fill = tail === undefined ? 0 : 8 - left.length - right.length
+  return [...left, ...Array<string>(Math.max(0, fill)).fill("0"), ...right].map((hextet) => Number.parseInt(hextet, 16))
+}
+
 /** Loopback, private, link-local, CGNAT, multicast and reserved ranges are not client hosts. */
 export const isPublicAddress = (address: string): boolean => {
   const mapped = address.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
   if (mapped) return isPublicAddress(mapped[1]!)
   if (isIP(address) === 4) {
-    const [a, b] = address.split(".").map(Number) as [number, number]
+    const [a, b, c] = address.split(".").map(Number) as [number, number, number]
     return !(
       a === 0 || a === 10 || a === 127 || a >= 224
       || (a === 100 && b >= 64 && b <= 127)
       || (a === 169 && b === 254)
       || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 0 && (c === 0 || c === 2))
+      || (a === 192 && b === 88 && c === 99)
       || (a === 192 && b === 168)
       || (a === 198 && (b === 18 || b === 19))
+      || (a === 198 && b === 51 && c === 100)
+      || (a === 203 && b === 0 && c === 113)
     )
   }
   if (isIP(address) === 6) {
-    const lower = address.toLowerCase()
-    // Unique-local, link-local, multicast, and anything embedding an IPv4 address
-    // (::/96 compatible, ::ffff: mapped, 64:ff9b:: NAT64, 2002:: 6to4) is refused.
-    return !(lower.startsWith("::") || /^f[cd]/.test(lower) || /^fe[89a-f]/.test(lower) || /^ff/.test(lower)
-      || /^64:ff9b:/.test(lower) || /^2002:/.test(lower))
+    const h = ipv6Hextets(address)
+    if (h.length !== 8 || h.some((hextet) => !Number.isInteger(hextet) || hextet < 0 || hextet > 0xffff)) return false
+    const [h0, h1, h2, h3] = h as [number, number, number, number]
+    // ::/16 (unspecified, loopback, IPv4-compatible and -mapped), discard-only, unique-local,
+    // link-local, site-local, multicast, documentation, and anything embedding an IPv4
+    // address (64:ff9b:: NAT64, 2001::/32 Teredo, 2002:: 6to4) is refused.
+    return !(
+      h0 === 0
+      || (h0 === 0x100 && h1 === 0 && h2 === 0 && h3 === 0)
+      || (h0 & 0xfe00) === 0xfc00
+      || h0 >= 0xfe80
+      || (h0 === 0x64 && h1 === 0xff9b)
+      || (h0 === 0x2001 && (h1 === 0 || h1 === 0xdb8))
+      || h0 === 0x2002
+    )
   }
   return false
 }
 
-const assertPublicHost = async (hostname: string) => {
-  const host = hostname.replace(/^\[|\]$/g, "")
-  const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((entry) => entry.address)
-  if (addresses.length === 0 || !addresses.every(isPublicAddress)) throw new Error("client metadata host is not public")
+const NOT_PUBLIC = "client metadata host is not public"
+
+/**
+ * DNS lookup for the metadata connection that refuses the whole answer if any
+ * address is not public. The socket connects to the address checked here, so a
+ * second, rebound resolution never happens.
+ */
+const publicLookup = (
+  hostname: string,
+  options: LookupOneOptions | LookupAllOptions,
+  callback: (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
+) => {
+  lookup(hostname, { all: true, family: options.family ?? 0, hints: options.hints }).then(
+    (entries) => {
+      if (entries.length === 0 || !entries.every((entry) => isPublicAddress(entry.address))) return callback(new Error(NOT_PUBLIC), [])
+      if (options.all) return callback(null, entries)
+      callback(null, entries[0]!.address, entries[0]!.family)
+    },
+    (error: NodeJS.ErrnoException) => callback(error, []),
+  )
 }
 
-/** Read at most `limit` bytes of a response body. */
-const readLimited = async (response: Response, limit: number) => {
-  const reader = response.body?.getReader()
-  if (!reader) return ""
-  const chunks: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > limit) {
-      await reader.cancel().catch(() => {})
-      throw new Error("client metadata document is too large")
-    }
-    chunks.push(value)
-  }
-  return new TextDecoder().decode(Buffer.concat(chunks))
-}
+/**
+ * GET a Client ID Metadata Document over https: no redirects, at most `limit`
+ * bytes, and (unless `allowPrivate`) only public addresses, checked on the
+ * address actually connected to.
+ */
+const fetchMetadataDocument = (target: URL, limit: number, allowPrivate: boolean) =>
+  new Promise<string>((resolve, reject) => {
+    if (target.protocol !== "https:") return reject(new Error("client metadata URL must be https"))
+    const host = target.hostname.replace(/^\[|\]$/g, "")
+    if (!allowPrivate && isIP(host) && !isPublicAddress(host)) return reject(new Error(NOT_PUBLIC))
+    const req = httpsRequest(target, {
+      method: "GET",
+      agent: false,
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(5_000),
+      ...(allowPrivate ? {} : { lookup: publicLookup }),
+    }, (res) => {
+      const status = res.statusCode ?? 0
+      if (status < 200 || status >= 300) {
+        res.destroy()
+        return reject(new Error(`status ${status}`))
+      }
+      const chunks: Buffer[] = []
+      let size = 0
+      res.on("data", (chunk: Buffer) => {
+        size += chunk.byteLength
+        if (size > limit) {
+          res.destroy()
+          return reject(new Error("client metadata document is too large"))
+        }
+        chunks.push(chunk)
+      })
+      res.on("end", () => resolve(new TextDecoder().decode(Buffer.concat(chunks))))
+      res.on("error", reject)
+    })
+    req.on("error", reject)
+    req.end()
+  })
 
 class AuthorizeError extends Error {
   constructor(readonly code: string, message: string) {
@@ -252,10 +318,7 @@ export const createAuthServer = (config: AuthServerConfig) => {
     }
     let doc: { client_id?: unknown; client_name?: unknown; redirect_uris?: unknown }
     try {
-      if (!config.allowPrivateClientMetadata) await assertPublicHost(target.hostname)
-      const res = await http(target, { redirect: "error", signal: AbortSignal.timeout(5_000), headers: { accept: "application/json" } })
-      if (!res.ok) throw new Error(`status ${res.status}`)
-      doc = JSON.parse(await readLimited(res, MAX_METADATA_BYTES))
+      doc = JSON.parse(await fetchMetadataDocument(target, MAX_METADATA_BYTES, config.allowPrivateClientMetadata === true))
       if (doc?.client_id !== clientId) throw new Error("client_id mismatch")
     } catch {
       throw new AuthorizeError("invalid_client", "Could not load a valid client metadata document")

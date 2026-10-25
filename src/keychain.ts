@@ -89,7 +89,7 @@ const assertPrivate = (stats: { uid: number; mode: number }, what: string) => {
   }
 }
 
-const ensurePrivateDirectory = async (directory: string) => {
+export const ensurePrivateDirectory = async (directory: string) => {
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const stats = await lstat(directory)
   if (!stats.isDirectory()) {

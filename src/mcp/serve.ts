@@ -48,6 +48,8 @@ export interface HttpOptions {
   readonly url?: string
   /** Expose history, search and unread. Off unless `--allow-read` is passed. */
   readonly allowRead?: boolean
+  /** Allow plain HTTP on non-loopback interfaces, exposing tokens in cleartext. */
+  readonly allowPlaintext?: boolean
 }
 
 const MIN_SECRET_BYTES = 32
@@ -88,8 +90,15 @@ export const loadHttpConfig = Effect.fn("loadHttpConfig")(function* (options: Ht
   }
   const isLoopback = localhostAllowedHostnames().includes(baseUrl.hostname)
   if (baseUrl.protocol !== "https:" && !isLoopback) return yield* configError("--url must use https unless it is localhost")
-  if (!isLoopbackHost(options.host)) {
-    yield* Console.error(`Warning: listening on ${options.host} exposes plain HTTP beyond this machine. Prefer 127.0.0.1 behind a TLS tunnel.`)
+  const isLoopbackBind = isLoopbackHost(options.host)
+  if (!isLoopbackBind && options.allowPlaintext !== true) {
+    return yield* configError(
+      `Refusing to listen on ${options.host}: the server speaks plain HTTP, so tokens would cross the network in cleartext. Bind 127.0.0.1 behind a TLS tunnel, or pass --allow-plaintext to accept the risk.`,
+    )
+  } else if (!isLoopbackBind) {
+    yield* Console.error(
+      `Warning: --allow-plaintext: listening on ${options.host} sends OAuth codes and bearer tokens in cleartext beyond this machine.`,
+    )
   }
 
   let secret = yield* secretOrEnv("BUDDYTG_MCP_SECRET", KC_MCP_SECRET)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createEventBus, type ExtensionContext, type ToolDefinition } from "@earendil-works/pi-coding-agent"
@@ -27,19 +27,22 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true })
 })
 
-function harness(hasUI = false, confirm: ExtensionContext["ui"]["confirm"] = async () => { throw new Error("must not prompt") }) {
+function harness(hasUI = false, confirm: ExtensionContext["ui"]["confirm"] = async () => { throw new Error("must not prompt") }, cwd = directory) {
   const tools = new Map<string, Pick<ToolDefinition, "parameters" | "execute">>()
   const calls: string[][] = []
+  const timeouts: (number | undefined)[] = []
   let now = 0
-  registerBuddyTG({ registerTool(tool) { tools.set(tool.name, tool) }, registerCommand() {}, on() {}, events: createEventBus() }, async (args, signal) => {
+  registerBuddyTG({ registerTool(tool) { tools.set(tool.name, tool) }, registerCommand() {}, on() {}, events: createEventBus() }, async (args, signal, timeoutMs) => {
     signal?.throwIfAborted()
     calls.push([...args])
+    timeouts.push(timeoutMs)
     return "fake delivery"
   }, { now: () => now, sleep: async ms => { now += ms } })
   // Only these context fields are read by send tools. No session or live CLI exists.
-  const ctx = { cwd: directory, hasUI, ui: { confirm } } as ExtensionContext
+  const ctx = { cwd, hasUI, ui: { confirm } } as ExtensionContext
   return {
     calls,
+    timeouts,
     async send(name: string, params: unknown, signal?: AbortSignal) {
       const tool = tools.get(name)
       if (!tool) throw new Error("Missing tool")
@@ -53,12 +56,14 @@ function harness(hasUI = false, confirm: ExtensionContext["ui"]["confirm"] = asy
 for (const hasUI of [true, false]) test(`both tools default to no prompt, hasUI=${hasUI}`, async () => {
   const h = harness(hasUI)
   const message = 'literal $(echo no); "hello"\nnext'
+  const file = await realpath(join(directory, "animation.gif"))
   await h.send("buddytg_send", { recipientId: "123", message })
   await h.send("buddytg_send_file", { recipientId: "123", path: "@animation.gif", caption: "exact caption" })
   expect(h.calls).toEqual([
     ["send", "123", message],
-    ["file", "send", "123", join(directory, "animation.gif"), "--confirm-to", "123", "--caption", "exact caption"],
+    ["file", "send", "123", file, "--confirm-telegram", "--caption", "exact caption"],
   ])
+  expect(h.timeouts).toEqual([undefined, 15 * 60_000])
 })
 
 for (const name of ["buddytg_send", "buddytg_send_file"]) {
@@ -74,9 +79,10 @@ for (const name of ["buddytg_send", "buddytg_send_file"]) {
     const approved = harness(true, async (_title, manifest, options) => {
       prompts++
       expect(options?.timeout).toBe(60_000)
+      const file = await realpath(join(directory, "animation.gif"))
       expect(JSON.parse(manifest)).toEqual(name === "buddytg_send"
         ? { recipientId: "123", message: "hello" }
-        : { recipientId: "123", path: join(directory, "animation.gif"), bytes: 6, mode: "document", caption: "" })
+        : { recipientId: "123", path: file, bytes: 6, mode: "document", caption: "" })
       return true
     })
     await approved.send(name, params)
@@ -115,6 +121,31 @@ test("missing, empty, directory and symlink files never upload without prompts",
   for (const path of ["missing", "empty", ".", "link"])
     await expect(h.send("buddytg_send_file", { recipientId: "123", path })).rejects.toThrow()
   expect(h.calls).toEqual([])
+})
+
+test("secret-store files reached through relative traversal never reach the CLI", async () => {
+  const originalSecretsDirectory = process.env.BUDDYTG_SECRETS_DIR
+  const secretsDirectory = join(directory, "secrets")
+  const cwd = join(directory, "cwd")
+  await mkdir(secretsDirectory)
+  await mkdir(cwd)
+  await writeFile(join(secretsDirectory, "session"), "private session")
+  process.env.BUDDYTG_SECRETS_DIR = secretsDirectory
+  try {
+    const h = harness(false, undefined, cwd)
+    await expect(h.send("buddytg_send_file", { recipientId: "123", path: "../secrets/session" })).rejects.toThrow("secret store")
+    expect(h.calls).toEqual([])
+  } finally {
+    if (originalSecretsDirectory === undefined) delete process.env.BUDDYTG_SECRETS_DIR
+    else process.env.BUDDYTG_SECRETS_DIR = originalSecretsDirectory
+  }
+})
+
+test("file upload never passes --confirm-to", async () => {
+  const h = harness()
+  await h.send("buddytg_send_file", { recipientId: "123", path: "animation.gif" })
+  expect(h.calls[0]).toContain("--confirm-telegram")
+  expect(h.calls[0]).not.toContain("--confirm-to")
 })
 
 test("file mutation during opt-in approval blocks upload", async () => {

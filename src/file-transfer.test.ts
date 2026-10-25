@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  lstat,
   mkdtemp,
   mkdir,
   readFile,
@@ -22,6 +23,7 @@ import {
   sanitizeDownloadFileName,
   validateUploadLimits,
   writePrivateDownload,
+  writePrivateFile,
 } from "./file-transfer"
 
 const withTempDirectory = async (run: (directory: string) => Promise<void>) => {
@@ -32,6 +34,11 @@ const withTempDirectory = async (run: (directory: string) => Promise<void>) => {
     await rm(directory, { recursive: true, force: true })
   }
 }
+
+const privateTemporaryFiles = async (directory: string) =>
+  (await readdir(directory)).filter(
+    (entry) => entry.startsWith(".buddytg-") && entry.endsWith(".part"),
+  )
 
 describe("parseFileCommand", () => {
   test("parses an explicitly confirmed file send", () => {
@@ -274,5 +281,48 @@ describe("private downloads", () => {
         }),
       ).rejects.toThrow("exceeded the configured limit")
       expect(await readdir(directory)).toEqual([])
+    }))
+})
+
+describe("writePrivateFile", () => {
+  test("writes a new file with mode 0600 and removes its temporary file", () =>
+    withTempDirectory(async (directory) => {
+      const target = join(directory, "bookmarks.md")
+      await writePrivateFile(target, "saved messages")
+
+      expect({
+        content: await readFile(target, "utf8"),
+        mode: (await stat(target)).mode & 0o777,
+      }).toEqual({ content: "saved messages", mode: 0o600 })
+      expect(await privateTemporaryFiles(directory)).toEqual([])
+    }))
+
+  test("refuses an existing file without changing it or leaving a temporary file", () =>
+    withTempDirectory(async (directory) => {
+      const target = join(directory, "bookmarks.md")
+      await writeFile(target, "original")
+
+      await expect(writePrivateFile(target, "replacement")).rejects.toThrow(
+        /Refusing to overwrite/,
+      )
+
+      expect(await readFile(target, "utf8")).toBe("original")
+      expect(await privateTemporaryFiles(directory)).toEqual([])
+    }))
+
+  test("refuses an existing symlink without changing its pointee or leaving a temporary file", () =>
+    withTempDirectory(async (directory) => {
+      const pointee = join(directory, "original.md")
+      const target = join(directory, "bookmarks.md")
+      await writeFile(pointee, "original")
+      await symlink(pointee, target)
+
+      await expect(writePrivateFile(target, "replacement")).rejects.toThrow(
+        /Refusing to overwrite/,
+      )
+
+      expect((await lstat(target)).isSymbolicLink()).toBe(true)
+      expect(await readFile(pointee, "utf8")).toBe("original")
+      expect(await privateTemporaryFiles(directory)).toEqual([])
     }))
 })

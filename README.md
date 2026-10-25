@@ -209,6 +209,8 @@ bun run buddytg bookmarks notes/telegram.md
 bun run buddytg bookmarks notes/telegram.md --download-media
 ```
 
+The export refuses to overwrite an existing file. Choose a new path or remove the old export first.
+
 Exports are ordered oldest first. Each entry includes its timestamp and message ID; rich formatting, tags, forwarded-message attribution, and links between replies are retained where available.
 
 ### Configure bot notifications
@@ -265,7 +267,10 @@ hook or another program.
 `ask` uses Telegram Bot API [`getUpdates`](https://core.telegram.org/bots/api#getupdates)
 long polling. Telegram does not permit long polling while that bot has an outgoing
 webhook configured, and a bot should have only one active update consumer. Use a
-dedicated BuddyTG bot and do not run concurrent `ask` commands for the same token.
+dedicated BuddyTG bot. A second `ask` (or `hook permission`, or `file send
+--confirm-telegram`) for the same token fails at once with "Another buddytg
+process … is running" instead of competing for updates, and a Telegram
+getUpdates conflict from a consumer elsewhere is reported the same way.
 
 ### Answer Codex and Claude Code approvals from Telegram
 
@@ -396,7 +401,8 @@ cannot grant access. Client ID Metadata Documents are fetched only from public a
 Settings are read from the environment first, so `doppler run -- buddytg mcp http` works. The
 variables are `BUDDYTG_MCP_URL`, `BUDDYTG_MCP_SECRET`, `TG_LOGIN_CLIENT_ID`,
 `TG_LOGIN_CLIENT_SECRET` and `BUDDYTG_MCP_ALLOWED_IDS`. Without them, the secret store is used. The
-HTTP server binds `127.0.0.1` and validates `Host` and `Origin`. It does not expose
+HTTP server binds `127.0.0.1` and validates `Host` and `Origin`. A non-loopback `--host` is
+refused unless you pass `--allow-plaintext`, because the listener has no TLS. It does not expose
 `buddytg_send_file`, because a remote caller could then upload any file your user can read. Over
 stdio, every upload waits for your **Send file** tap in Telegram (the message names the resolved
 recipient and the file), and paths inside BuddyTG's secret store are refused.
@@ -505,6 +511,7 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/ask.ts` | Correlated Force Reply/inline-button questions and long polling |
 | `src/permission-hook.ts` | Shared Codex/Claude permission-hook input and decision mapping |
 | `src/keychain.ts` | Effect secret-store service (macOS Keychain or a private user directory) |
+| `src/lock.ts` | Single-instance lockfile for each bot's update stream |
 | `src/prompt.ts` | Interactive and secret terminal prompts |
 
 The Telegram client uses in-memory storage. After authenticated operations, its exported session is persisted in the local secret store rather than in a session file inside the project.

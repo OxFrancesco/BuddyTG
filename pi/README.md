@@ -32,7 +32,7 @@ Use `/buddytg login` in the Pi terminal, approve the dialog, then scan the QR wi
 - `buddytg_send` sends exact plain text to a previously verified numeric recipient ID.
 - `buddytg_reply` replies to one message ID and sends nothing if that message no longer exists in the chat.
 - `buddytg_history`, `buddytg_search` and `buddytg_unread` read messages as JSON lines, marked as untrusted content written by other people. Reading never marks messages as read.
-- `buddytg_send_file` sends a nonempty regular local file as a document. Relative paths resolve against pi's current directory. It checks for changes during approval and uses the CLI's exact recipient confirmation and upload checks.
+- `buddytg_send_file` uploads a nonempty regular local file as a document. Relative paths resolve against pi's current directory. The BuddyTG secret store is refused, and each upload needs approval in Telegram before any bytes are sent. `BUDDYTG_CONFIRM_SENDS=1` also asks for pi UI confirmation. The extension checks file stability after that confirmation.
 - `/buddytg` displays help; `/buddytg whoami` retains the existing account command.
 - `/buddytg login` opens private interactive QR login after confirmation.
 - `/buddytg logout` explicitly confirms before running the existing CLI logout, including removal of API and bot secrets. This affects the CLI too.
@@ -58,9 +58,9 @@ Active means the last account probe confirmed authentication, not a continuous c
 
 Startup/reload performs one read-only check; additional checks happen only on explicit refresh or after an explicitly approved login/logout. No polling occurs. Account commands and status publishing are TUI-only, not RPC/print/JSON.
 
-Message and file sends are auto-approved by default, including Saved Messages. TUI, RPC, print and JSON modes can send without a confirmation dialog when already authenticated. This only removes BuddyTG's send prompt, not recipient validation, file checks or other Pi extensions' permission gates. Resolve recipients with the read tools first. The extension does not maintain a history-based recipient allowlist; the numeric-ID schema and existing CLI recipient checks remain in place.
+Message sends are auto-approved by default, including Saved Messages. TUI, RPC, print and JSON modes can send messages without a confirmation dialog when already authenticated. File uploads always require approval in Telegram before any bytes are sent, and BuddyTG's secret store is refused. `BUDDYTG_CONFIRM_SENDS=1` adds a pi UI confirmation for BuddyTG sends. Resolve recipients with the read tools first. The extension does not maintain a history-based recipient allowlist; the numeric-ID schema and existing CLI recipient checks remain in place.
 
-To restore a fresh UI confirmation for each send, start Pi with `BUDDYTG_CONFIRM_SENDS=1 pi`. `true` and `yes` also enable it; unset, empty, `0`, `false` and `no` disable it. Values are trimmed and case-insensitive. Invalid values fail the send rather than silently approving it. This is a process environment setting, not a model-controlled tool parameter or a Pi settings.json key.
+To add a fresh pi UI confirmation for each BuddyTG send, start Pi with `BUDDYTG_CONFIRM_SENDS=1 pi`. File uploads still require Telegram approval. `true` and `yes` also enable the UI prompt; unset, empty, `0`, `false` and `no` disable it. Values are trimmed and case-insensitive. Invalid values fail the send rather than silently approving it. This is a process environment setting, not a model-controlled tool parameter or a Pi settings.json key.
 
 With confirmation enabled, print/JSON sends fail closed. RPC requires a client that responds to Pi confirmation dialogs; denial, cancellation or no response within 60 seconds prevents sending. The manifest includes the exact numeric recipient, message or file path, byte size and caption. Login/logout still require explicit TUI commands and their own confirmations regardless of this setting.
 

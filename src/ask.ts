@@ -1,5 +1,6 @@
 import { Clock, Console, Effect, Option, Schema } from "effect"
-import { botApi, BotMessage, BotUpdate, decodeChatId, loadBotChatId, loadBotToken, WebhookInfo } from "./bot"
+import { botApi, BotError, BotMessage, BotUpdate, decodeChatId, loadBotChatId, loadBotToken, WebhookInfo } from "./bot"
+import { holdBotUpdatesLock } from "./lock"
 
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_CHOICES = 8
@@ -162,6 +163,19 @@ export const matchAskUpdate = (
 const POLL_SECONDS = 30
 const REQUEST_TIMEOUT_MS = 15_000
 
+/** Telegram answers 409 Conflict when another consumer is already polling this bot. */
+const failOnUpdatesConflict = <A, R>(self: Effect.Effect<A, BotError, R>) =>
+  self.pipe(
+    Effect.catchIf(
+      (error) => error.errorCode === 409,
+      () =>
+        Effect.fail(askError(
+          "Another process is reading this bot's updates (Telegram getUpdates conflict). "
+            + "Stop the other buddytg ask or bot consumer, or configure a separate bot.",
+        )),
+    ),
+  )
+
 export const askViaTelegram = Effect.fn("askViaTelegram")(function* (options: AskOptions) {
   const token = yield* loadBotToken
   if (!token) {
@@ -172,6 +186,8 @@ export const askViaTelegram = Effect.fn("askViaTelegram")(function* (options: As
     return yield* askError("Telegram bot chat is not configured. Run `buddytg notify \"Ready\"` once.")
   }
   const chatId = yield* decodeChatId(storedChatId)
+  // A bot has one update stream: a second local consumer would steal this prompt's answer.
+  yield* holdBotUpdatesLock(token)
 
   const webhook = yield* botApi(token, "getWebhookInfo", {}, WebhookInfo, { timeoutMs: REQUEST_TIMEOUT_MS })
   if (webhook.url) {
@@ -186,7 +202,7 @@ export const askViaTelegram = Effect.fn("askViaTelegram")(function* (options: As
     limit: 1,
     timeout: 0,
     allowed_updates: ["message", "callback_query"],
-  }, Updates, { timeoutMs: REQUEST_TIMEOUT_MS })
+  }, Updates, { timeoutMs: REQUEST_TIMEOUT_MS }).pipe(failOnUpdatesConflict)
   const highestPendingId = maxUpdateId(pending)
   let offset = highestPendingId === undefined ? undefined : highestPendingId + 1
 
@@ -227,7 +243,7 @@ export const askViaTelegram = Effect.fn("askViaTelegram")(function* (options: As
       limit: 100,
       timeout,
       allowed_updates: ["message", "callback_query"],
-    }, Updates, { timeoutMs: (timeout + 15) * 1_000 })
+    }, Updates, { timeoutMs: (timeout + 15) * 1_000 }).pipe(failOnUpdatesConflict)
 
     // Decode one update at a time: a malformed update is skipped, not fatal.
     for (const raw of updates) {
