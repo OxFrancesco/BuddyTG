@@ -209,6 +209,8 @@ bun run buddytg bookmarks notes/telegram.md
 bun run buddytg bookmarks notes/telegram.md --download-media
 ```
 
+The export refuses to overwrite an existing file. Choose a new path or remove the old export first.
+
 Exports are ordered oldest first. Each entry includes its timestamp and message ID; rich formatting, tags, forwarded-message attribution, and links between replies are retained where available.
 
 ### Configure bot notifications

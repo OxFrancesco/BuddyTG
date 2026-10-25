@@ -61,6 +61,17 @@ export const exportBookmarks = Effect.fn("exportBookmarks")(function* (
   withMedia: boolean,
 ) {
   const target = resolve(file ?? "saved-messages.md")
+  yield* Effect.tryPromise({
+    try: async () => {
+      try {
+        await lstat(target)
+        throw new Error(`Refusing to overwrite existing file: ${escapeTerminalText(target)}`)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      }
+    },
+    catch: (error) => new FileTransferError({ message: messageOf(error) }),
+  })
   const client = yield* makeAuthedClient
   const messages = yield* tg(async () => {
     const all = []
