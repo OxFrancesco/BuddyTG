@@ -508,12 +508,10 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/ask.ts` | Correlated Force Reply/inline-button questions and long polling |
 | `src/permission-hook.ts` | Shared Codex/Claude permission-hook input and decision mapping |
 | `src/keychain.ts` | Effect secret-store service (macOS Keychain or a private user directory) |
-| `src/lock.ts` | Single-instance lockfiles for the Telegram session and each bot's update stream |
+| `src/lock.ts` | Single-instance lockfile for each bot's update stream |
 | `src/prompt.ts` | Interactive and secret terminal prompts |
 
 The Telegram client uses in-memory storage. After authenticated operations, its exported session is persisted in the local secret store rather than in a session file inside the project.
-
-One process at a time uses the Telegram session. Every command that opens it, and the pi account check, holds `session.lock` in the secrets directory (`BUDDYTG_SECRETS_DIR`, `$XDG_CONFIG_HOME/buddytg/secrets` or `~/.config/buddytg/secrets`, also on macOS). A second process fails at once with "Another buddytg process (pid …) is running". A lock left by a process that no longer runs is taken over.
 
 ## Security notes
 

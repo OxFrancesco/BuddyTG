@@ -2,7 +2,6 @@ import { TelegramClient } from "@mtcute/bun"
 import { MemoryStorage, tl } from "@mtcute/core"
 import { Config, Effect, Option, Redacted, Schema, SchemaGetter as Getter } from "effect"
 import { Keychain } from "./keychain"
-import { holdSessionLock } from "./lock"
 import { createMtprotoTransport, selectMtprotoTransport } from "./mtproto-transport"
 
 export const KC_SESSION = "session"
@@ -76,10 +75,9 @@ export const loadApiCredentials = Effect.gen(function* () {
  * Uses in-memory storage; the session is persisted in the local secret store.
  * Linux defaults to WebSocket MTProto; macOS keeps TCP. See `selectMtprotoTransport`.
  * Release is bounded so a stuck connection cannot block exit.
- * Holds the session lock for the client's lifetime: one auth key, one process.
  */
 export const makeClient = (creds: ApiCredentials) =>
-  holdSessionLock.pipe(Effect.andThen(Effect.acquireRelease(
+  Effect.acquireRelease(
     Effect.sync(() => {
       const selection = selectMtprotoTransport()
       return new TelegramClient({
@@ -92,7 +90,7 @@ export const makeClient = (creds: ApiCredentials) =>
     }),
     (client) =>
       Effect.promise(() => Promise.race([client.destroy().catch(() => {}), Bun.sleep(5_000)])),
-  )))
+  )
 
 /** Client restored from the stored session — for authenticated commands. */
 export const makeAuthedClient = Effect.gen(function* () {

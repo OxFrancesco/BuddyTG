@@ -241,29 +241,6 @@ test("a second ask for the same bot fails fast instead of competing for its upda
   expect((await readdir(secrets)).filter((name) => name.endsWith(".lock"))).toEqual([])
 })
 
-test("commands refuse the Telegram session while another process holds it, and logout keeps the secrets", async () => {
-  const other = Bun.spawn(["sleep", "30"])
-  await writeFile(join(secrets, "session.lock"), `${other.pid}\n`, { mode: 0o600 })
-  await writeSecret("api-id", "12345")
-  await writeSecret("api-hash", "0123456789abcdef0123456789abcdef")
-  await writeSecret("session", "DUMMY-SESSION")
-  try {
-    for (const args of [["whoami"], ["send", "me", "hi"], ["logout"]]) {
-      const result = await finish(spawnCli(args))
-      expect(result.exitCode).toBe(1)
-      expect(result.stderr).toBe(
-        `Error: Another buddytg process (pid ${other.pid}) is running: it is using the Telegram session. Wait for it to finish and try again.\n`,
-      )
-    }
-    expect(existsSync(join(secrets, "session"))).toBe(true)
-    expect(existsSync(join(secrets, "bot-token"))).toBe(true)
-    expect(existsSync(join(secrets, "session.lock"))).toBe(true)
-  } finally {
-    other.kill()
-    await Promise.all(["session.lock", "api-id", "api-hash", "session"].map((name) => rm(join(secrets, name), { force: true })))
-  }
-})
-
 test("a getUpdates conflict from Telegram is reported, not retried", async () => {
   const result = await finish(spawnCli(["ask", "--timeout", "5", "Ready?"], { env: env({ TG_BOT_TOKEN: POLLED_TOKEN }) }))
   expect(result.exitCode).toBe(1)

@@ -1,6 +1,6 @@
 /**
- * Single-instance locks for credentials that must have one user at a time:
- * the MTProto session (one auth key) and each bot token's getUpdates stream.
+ * Single-instance lock for each bot token's getUpdates stream: Telegram allows
+ * one update consumer per bot, and a second local one would steal answers.
  *
  * A lock is a file created with O_EXCL in the secrets directory, holding the
  * owner's PID. A lock whose PID no longer runs is stale and is taken over, so a
@@ -137,21 +137,6 @@ export const holdInstanceLock = (
         await release(key)
       }),
   )
-
-/** Async form for entry points outside Effect. Resolves to the release function. */
-export const acquireInstanceLock = async (
-  name: string,
-  busy: string,
-  directory = defaultSecretsDirectory(),
-): Promise<() => Promise<void>> => {
-  const path = await acquire(directory, name, busy)
-  return () => release(path)
-}
-
-export const SESSION_LOCK = "session"
-export const SESSION_BUSY = "it is using the Telegram session"
-
-export const holdSessionLock = Effect.suspend(() => holdInstanceLock(SESSION_LOCK, SESSION_BUSY))
 
 /** One lock per bot token. The name is a hash, so the token never reaches the filesystem. */
 export const botUpdatesLockName = (token: Redacted.Redacted<string>) =>

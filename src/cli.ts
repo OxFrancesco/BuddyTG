@@ -20,7 +20,6 @@ import { downloadFileCommand, sendFileCommand } from "./file-commands"
 import { escapeTerminalText, parseFileCommand } from "./file-transfer"
 import { history, parseHistoryArgs, parseReplyArgs, parseSearchArgs, parseUnreadArgs, reply, search, unread } from "./messages"
 import { Keychain } from "./keychain"
-import { holdSessionLock } from "./lock"
 import { KC_LOGIN_CLIENT_ID, KC_LOGIN_CLIENT_SECRET, KC_MCP_SECRET, runHttp, runStdio } from "./mcp/serve"
 import { resolveSendTarget } from "./peer-target"
 import {
@@ -384,8 +383,6 @@ const ENV_SECRETS = ["TG_API_ID", "TG_API_HASH", "TG_BOT_TOKEN", "TG_BOT_CHAT_ID
 
 const logout = Effect.gen(function* () {
   const keychain = yield* Keychain
-  // Held across the deletes, so a concurrent command cannot write the session back.
-  yield* holdSessionLock
   yield* Effect.gen(function* () {
     const client = yield* makeAuthedClient
     yield* tg(() => client.logOut())
@@ -405,7 +402,7 @@ const logout = Effect.gen(function* () {
   if (fromEnv.length > 0) {
     yield* Console.error(`Still set in the environment, and used before the secret store: ${fromEnv.join(", ")}`)
   }
-}).pipe(Effect.scoped)
+})
 
 const [cmd, ...rest] = process.argv.slice(2)
 const flags = rest.filter((a) => a.startsWith("--"))

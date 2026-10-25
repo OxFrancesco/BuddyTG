@@ -4,7 +4,7 @@ import { existsSync } from "node:fs"
 import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { acquireInstanceLock, botUpdatesLockName, holdInstanceLock, InstanceLockError } from "./lock"
+import { botUpdatesLockName, holdInstanceLock, InstanceLockError } from "./lock"
 
 let dir: string
 const lockPath = () => join(dir, "t.lock")
@@ -60,7 +60,6 @@ test("fails fast while another live process holds it, and leaves its lock alone"
       `Another buddytg process (pid ${other.pid}) is running: testing. Wait for it to finish and try again.`,
     )
     expect(await readFile(lockPath(), "utf8")).toBe(`${other.pid}\n`)
-    await expect(acquireInstanceLock("t", "testing", dir)).rejects.toThrow("Another buddytg process")
   } finally {
     other.kill()
   }
@@ -85,13 +84,6 @@ test("an unreadable lock is busy while fresh and stale once old", async () => {
   const old = new Date(Date.now() - 60_000)
   await utimes(lockPath(), old, old)
   expect(Exit.isSuccess(await run(hold()))).toBe(true)
-})
-
-test("the async form releases its lock", async () => {
-  const release = await acquireInstanceLock("t", "testing", dir)
-  expect(await readFile(lockPath(), "utf8")).toBe(`${process.pid}\n`)
-  await release()
-  expect(existsSync(lockPath())).toBe(false)
 })
 
 test("bot lock names are per token and never contain it", () => {
