@@ -68,6 +68,10 @@ Use `/reload` or restart Pi to load source changes. The environment is read on e
 
 ## Limits and privacy
 
+All three send tools share one serialized queue per extension instance. By default, CLI send attempts start at least 3000 ms apart and stop after 30 attempts. The queue holds its turn until the CLI exits, so concurrent calls cannot bypass either limit. Failed and unknown-delivery attempts count too. Validation failures, declined confirmations and cancellations before CLI invocation do not count. Cancellation while queued or cooling down prevents sending. File metadata is checked again after the wait.
+
+Set `BUDDYTG_SEND_COOLDOWN_MS` to change the minimum interval in milliseconds, or `BUDDYTG_SEND_SESSION_CAP` to change the attempt cap. Both accept trimmed positive decimal integers only. Unset values use the defaults; empty, zero, negative, fractional, nonnumeric and unsafe integers fail the send. The cooldown cannot exceed 2147483647 ms. Neither limit can be disabled with 0. These are process environment settings, not tool parameters. They are read for each queued send; restart Pi from the configured shell to change them. The count lasts for the extension instance, not a chat or conversation, and resets on extension reload or process restart. These local limits reduce burst risk but do not guarantee Telegram will permit a send or prevent PEER_FLOOD. Other extension copies and standalone CLI calls do not share the counter.
+
 Commands have a 60-second deadline and honor tool cancellation. Cancellation kills the direct Bun CLI process. Interrupted or failed sends have unknown delivery status and must not be automatically retried. Large uploads may need the standalone CLI.
 
 Only the first 24 KiB of stdout is retained. Additional output is drained and discarded, not written to temporary files. Stderr is always drained and discarded because transport errors may include credentials. Failures return a generic diagnostic, not raw exception text. Successful read output contains private Telegram account data and becomes part of pi's session and model context.
