@@ -40,7 +40,7 @@ export interface ReplyOptions {
   readonly message: string
 }
 
-const parsePositive = (flag: string, value: string | undefined, max: number) => {
+export const parsePositive = (flag: string, value: string | undefined, max: number) => {
   if (value === undefined || !/^[1-9][0-9]*$/.test(value)) throw new Error(`${flag} requires a positive integer`)
   const number = Number(value)
   if (!Number.isSafeInteger(number) || number > max) throw new Error(`${flag} must be at most ${max}`)
@@ -48,7 +48,7 @@ const parsePositive = (flag: string, value: string | undefined, max: number) => 
 }
 
 /** Shared loop: `--flag value` pairs and bare tokens, in any order. */
-const parseTokens = (tokens: readonly string[], valued: ReadonlySet<string>, boolean: ReadonlySet<string> = new Set()) => {
+export const parseTokens = (tokens: readonly string[], valued: ReadonlySet<string>, boolean: ReadonlySet<string> = new Set()) => {
   const values = new Map<string, string | undefined>()
   const positional: string[] = []
   for (let index = 0; index < tokens.length; index += 1) {
@@ -118,12 +118,16 @@ export const safeJson = (value: unknown) =>
     (character) => `\\u${character.codePointAt(0)!.toString(16).padStart(4, "0")}`,
   )
 
-const peerKind = (peer: Peer) =>
+export const peerKind = (peer: Peer) =>
   peer.type === "chat" ? peer.chatType : peer.isSelf ? "self" : peer.isBot ? "bot" : "user"
 
 const describeSender = (peer: Peer) => ({ id: peer.id, name: peer.displayName, ...(peer.username ? { username: peer.username } : {}) })
 
-export const messageRecord = (message: Message, options: { readonly withChat: boolean }) => {
+export const messageRecord = (
+  message: Message,
+  options: { readonly withChat: boolean; readonly maxTextChars?: number },
+) => {
+  const maxTextChars = options.maxTextChars ?? MAX_TEXT_CHARS
   const media = message.media?.type
   const text = message.text
   const record: Record<string, unknown> = {
@@ -141,8 +145,8 @@ export const messageRecord = (message: Message, options: { readonly withChat: bo
   // Content protection forbids saving or forwarding; handing the text to an agent is both.
   if (message.isContentProtected) return { ...record, contentProtected: true }
   if (!text) return record
-  return text.length > MAX_TEXT_CHARS
-    ? { ...record, text: text.slice(0, MAX_TEXT_CHARS), truncatedFrom: text.length }
+  return text.length > maxTextChars
+    ? { ...record, text: text.slice(0, maxTextChars), truncatedFrom: text.length }
     : { ...record, text }
 }
 

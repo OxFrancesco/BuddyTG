@@ -4,6 +4,7 @@ import { Config, Console, Effect, Option, Redacted, Schema } from "effect"
 import qrcode from "qrcode-terminal"
 import { askViaTelegram, parseAskArgs } from "./ask"
 import { exportBookmarks } from "./bookmarks"
+import { exportChats, parseExportArgs } from "./export"
 import {
   botApi,
   BotMessage,
@@ -64,6 +65,10 @@ Usage:
   buddytg unread                 List chats with unread messages among the 500 most recent, as JSON lines
      --limit <n>            Max chats (default: 20; max: 100)
      --skip-archived        Leave out archived chats
+  buddytg export <directory>     Export full chat history to JSON lines files, through
+                                 Telegram's data export session (resumable)
+     --limit <n>            Only the n most recently active chats
+     --channels             Include broadcast channels
   buddytg file send <peer> <path>  Send one local file after exact recipient confirmation
      --caption <text>        Add a caption
      --as <document|photo>   Preserve exact bytes (default), or send a validated native photo
@@ -438,6 +443,8 @@ const command = (): Effect.Effect<unknown, unknown, Keychain> => {
       return parseArgs(() => parseSearchArgs(rest)).pipe(Effect.flatMap(search))
     case "unread":
       return parseArgs(() => parseUnreadArgs(rest)).pipe(Effect.flatMap(unread))
+    case "export":
+      return parseArgs(() => parseExportArgs(rest)).pipe(Effect.flatMap(exportChats))
     case "file":
       return parseArgs(() => parseFileCommand(rest)).pipe(
         Effect.flatMap((fileCommand) =>

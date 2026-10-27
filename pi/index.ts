@@ -67,7 +67,7 @@ export function registerBuddyTG(pi: Pick<ExtensionAPI, "registerTool" | "registe
     },
   })
   pi.registerTool({
-    name: "buddytg_history", label: "BuddyTG history", description: "Read recent messages of one chat, oldest first, without marking them read. Page back with beforeMessageId." + UNTRUSTED + " Output capped at 24 KiB.",
+    name: "buddytg_history", label: "BuddyTG history", description: "Read recent messages of one chat, oldest first, without marking them read. Page back with beforeMessageId. For whole histories or many chats, run `buddytg export <directory>` in a terminal and read its files instead of paging here." + UNTRUSTED + " Output capped at 24 KiB.",
     parameters: Type.Object({ chatId: id, limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })), beforeMessageId: Type.Optional(messageId) }),
     async execute(_id, p, signal) {
       return result(await run(["history", p.chatId, "--limit", String(p.limit ?? 20), ...(p.beforeMessageId === undefined ? [] : ["--before", String(p.beforeMessageId)])], signal))

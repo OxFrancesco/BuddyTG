@@ -13,6 +13,7 @@ BuddyTG uses [mtcute](https://mtcute.dev) for MTProto, [Effect](https://effect.w
 - Download one Telegram attachment to a private local file without overwriting
 - List your chats, groups, and channels with the IDs needed to message them
 - Read a chat's recent messages, search messages, list unread chats, and reply to a specific message
+- Export the full history of every chat to JSON lines files through Telegram's data export session
 - Sign in with a QR code or phone number
 - Export Saved Messages to Markdown, preserving rich text, tags, forwards, and reply links
 - Optionally download media alongside an export
@@ -195,6 +196,32 @@ characters are cut, with `truncatedFrom` giving the full length.
 
 `reply` checks that the message exists in that chat first. Telegram would otherwise post a reply to
 a missing ID as an ordinary message.
+
+### Export chat history
+
+Use `export` to read many chats. Calling `history` once per chat starts a new connection each time,
+with an empty peer cache, and loses any flood wait Telegram asked for between runs.
+
+```bash
+# Every private chat, bot, group and supergroup, archived ones included
+bun run buddytg export ~/telegram-export
+
+# Only the 50 most recently active chats; add broadcast channels
+bun run buddytg export ~/telegram-export --limit 50
+bun run buddytg export ~/telegram-export --channels
+```
+
+It runs in one process through a takeout session, the API Telegram Desktop's "Export chat history"
+uses, and sleeps through every flood wait however long it is. Telegram notifies your devices when
+an export starts. It can also hold the first export from a session, in which case the command says
+how long to wait.
+
+The directory gets `chats.jsonl`, one line per chat with its file, and `chats/<chat-id>.jsonl`.
+Each chat file starts with a notice line, then one message per line, oldest first, in the same
+format as `history` but with full text. A chat file appears only once it is complete. Run the same
+command again after an interruption and it skips finished chats. Chats with content protection are
+listed with `contentProtected: true` and get no file, since Telegram's export returns nothing for
+them. The directory is `0700` and every file `0600`.
 
 ### Export Saved Messages
 
@@ -502,6 +529,7 @@ Keep command behavior and examples in this README aligned with the usage text in
 | `src/cli.ts` | Top-level command dispatch and the existing account/message commands |
 | `src/chats.ts` | Chat-list argument parsing, filtering, and display rows |
 | `src/messages.ts` | History, search, unread and reply commands, with untrusted JSON-line output |
+| `src/export.ts` | Full-history export through a takeout session, resumable per chat |
 | `src/file-commands.ts` | Confirmed Telegram upload/download orchestration and progress reporting |
 | `src/file-transfer.ts` | File argument parsing, local preflight, validation, and private atomic writes |
 | `src/peer-target.ts` | Safe resolution of IDs, phone numbers, and Telegram links |
@@ -522,6 +550,7 @@ The Telegram client uses in-memory storage. After authenticated operations, its 
 - BuddyTG stores secrets in the macOS Keychain or a private `0700` user directory unless an environment variable overrides them.
 - Message contents still pass through Telegram's user or bot APIs as required by the selected command.
 - `history`, `search` and `unread` hand other people's messages to whatever reads the output. Over MCP HTTP they need `--allow-read`.
+- `export` writes the full history of your chats to disk. Telegram's API terms (section 1.5) forbid using data from Telegram to train or deploy AI models, so think about which chats an agent should read.
 - Approval hooks send the project name, tool name, and the full command or tool input to your configured private Telegram chat.
 - Telegram replies are accepted only from the configured chat and when correlated to the active prompt; use a dedicated bot and protect its token.
 - Markdown exports and downloaded media contain your Telegram data; choose their destination and permissions accordingly.

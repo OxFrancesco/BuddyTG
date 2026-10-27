@@ -107,7 +107,7 @@ export const buildServer = (run: CliRunner = cliRunner, options: ServerOptions =
 
   if (options.readMessages) {
     server.registerTool("buddytg_history", {
-      description: "Read recent messages of one chat, oldest first, without marking them read. Page back with beforeMessageId set to the smallest id seen." + UNTRUSTED,
+      description: "Read recent messages of one chat, oldest first, without marking them read. Page back with beforeMessageId set to the smallest id seen. For whole histories or many chats, run `buddytg export <directory>` in a terminal and read its files instead of paging here." + UNTRUSTED,
       inputSchema: z.object({
         chatId,
         limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
