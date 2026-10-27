@@ -164,14 +164,10 @@
               <pre><code>buddytg chats --limit 200 --archived</code></pre>
             </article>
             <article class="card">
-              <h3>Export Saved Messages</h3>
-              <p>Markdown, oldest first, with timestamps, message IDs, tags, forwards and reply links.</p>
-              <pre><code>buddytg bookmarks notes/telegram.md --download-media</code></pre>
-            </article>
-            <article class="card">
-              <h3>Export chat history</h3>
-              <p>Every chat to JSON lines, oldest first, through Telegram's own data export. Waits out rate limits and resumes where it stopped.</p>
-              <pre><code>buddytg export ~/telegram-export</code></pre>
+              <h3>Export</h3>
+              <p>Every chat to JSON lines through Telegram's own data export, resuming where it stopped. Saved Messages go to Markdown.</p>
+              <pre><code>buddytg export ~/telegram-export
+buddytg bookmarks notes/telegram.md</code></pre>
             </article>
             <article class="card">
               <h3>Notify yourself</h3>
